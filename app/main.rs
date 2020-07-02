@@ -9,7 +9,7 @@ fn main() -> Result<(), Error> {
 
     println!("ServerUrl: {}; PlayerKey: {}", server_url, player_key);
 
-    let response = isahc::get(format!("{}?player_key={}", server_url, player_key))?;
+    let response = isahc::get(format!("{}?playerKey={}", server_url, player_key))?;
     assert!(response.status().is_success());
 
     Ok(())

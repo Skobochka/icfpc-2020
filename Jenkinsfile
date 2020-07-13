@@ -9,8 +9,6 @@ pipeline {
     }
     stage('Build image') {
       agent { dockerfile true }
-      steps {
-      }
     }
   }
 }

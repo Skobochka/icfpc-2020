@@ -1,17 +1,18 @@
-pipeline {
-  agent none;
-  stages {
-    stage('Fetch Dockerfile') {
-      agent any;
-      steps {
-        sh 'wget -O Dockerfile https://raw.githubusercontent.com/icfpcontest2020/dockerfiles/master/dockerfiles/rust/Dockerfile'
-      }
+node {
+  stage ('Checkout') {
+    checkout scm
+
+    sh 'wget -O Dockerfile https://raw.githubusercontent.com/icfpcontest2020/dockerfiles/master/dockerfiles/rust/Dockerfile'
+  }
+
+  timeout(time: 10, unit: 'MINUTES') {
+    stage('Build') {
+      docker.build("icfpc2020-rust-org-image:${env.BUILD_TAG}", "--network=none .")
     }
-    stage('Build image') {
-      agent { dockerfile true }
-      steps {
-        echo 'Hello world!'
-      }
-    }
+  }
+  
+  stage('Test') {
+    echo 'Starting tests...'
+    sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 icfpc2020-rust-org-image:${env.BUILD_TAG}"
   }
 }

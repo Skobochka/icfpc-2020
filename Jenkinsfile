@@ -10,7 +10,7 @@ pipeline {
     stage('Build image') {
       agent { dockerfile true }
       steps {
-        sh 'echo Hello 2'
+        sh 'echo Hello 3'
       }
     }
   }

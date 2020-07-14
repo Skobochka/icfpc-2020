@@ -11,10 +11,15 @@ node {
         docker.build("icfpc2020-rust-org-image:${env.BUILD_TAG}", "--network=none .")
       }
     }
-  
+
     stage('Test') {
-      echo 'Starting tests...'
-      sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 icfpc2020-rust-org-image:${env.BUILD_TAG}"
+      sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 --entrypoint ./test.sh icfpc2020-rust-org-image:${env.BUILD_TAG}"
     }
+
+    // This is how Orgs will run the solution.
+    // stage('Run') {
+    //   echo 'Running solver...'
+    //   sh "docker run -t --rm icfpc2020-rust-org-image:${env.BUILD_TAG}"
+    // }
   }
 }

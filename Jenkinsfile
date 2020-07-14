@@ -21,5 +21,9 @@ node {
     //   echo 'Running solver...'
     //   sh "docker run -t --rm icfpc2020-rust-org-image:${env.BUILD_TAG}"
     // }
+
+    stage('Cleanup') {
+      sh "docker rmi icfpc2020-rust-org-image:${env.BUILD_TAG}"
+    }
   }
 }

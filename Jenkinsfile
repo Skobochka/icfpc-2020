@@ -12,9 +12,10 @@ node {
       }
     }
 
-    stage('Smoke Test') {
-      sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 icfpc2020-rust-org-image:${env.BUILD_TAG} http://server:12345 2933935384595749692"
-    }
+    // DISABLED until proper server found
+    // stage('Smoke Test') {
+    //   sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 icfpc2020-rust-org-image:${env.BUILD_TAG} http://server:12345 2933935384595749692"
+    // }
 
     stage('Test') {
       sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 --entrypoint ./test.sh icfpc2020-rust-org-image:${env.BUILD_TAG}"

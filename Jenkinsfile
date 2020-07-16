@@ -50,7 +50,7 @@ pipeline {
           def entries = currentBuild.changeSets[i].items
           for (int j = 0; j < entries.length; j++) {
             def entry = entries[j]
-            changeLog += " * \"${entry.msg}\" by ${entry.author}\n"
+            changeLog += "\n * \"${entry.msg}\" by ${entry.author}"
           }
         }
         changeLog += "```"

@@ -55,7 +55,7 @@ pipeline {
         }
         changeLog += "```"
 
-        telegramSend("*${currentBuild.currentResult}*  ${env.JOB_NAME}\nChanges:\n${changeLog}[Build log](${BUILD_URL})");
+        telegramSend "*${currentBuild.currentResult}*  ${env.JOB_NAME}\nChanges:\n${changeLog}[Build log](${BUILD_URL}/console)"
       }
     }
     success {

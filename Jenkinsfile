@@ -55,7 +55,7 @@ pipeline {
         }
         changeLog += "```"
 
-        step([$class: 'TelegramBotBuilder', message: "*${currentBuild.currentResult}*  ${env.JOB_NAME}\nChanges:\n${changeLog}[Build log](${BUILD_URL})"]);
+        telegramSend("*${currentBuild.currentResult}*  ${env.JOB_NAME}\nChanges:\n${changeLog}[Build log](${BUILD_URL})");
       }
     }
     success {

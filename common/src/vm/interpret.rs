@@ -12,9 +12,20 @@ pub struct Interpreter {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
-    EmptyInput,
     NoAppFunProvided,
-    NoAppArgProvided { fun: Ops, },
+    NoAppArgProvided { fun: AstNode, },
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Ast {
+    Empty,
+    Tree(AstNode),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum AstNode {
+    Literal { value: Op, },
+    App { fun: Box<AstNode>, arg: Box<AstNode>, },
 }
 
 impl Interpreter {
@@ -24,21 +35,21 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&self, Ops(ops): Ops, _env: &mut Env) -> Result<Ops, Error> {
+    pub fn build_tree(&self, Ops(ops): Ops, _env: &mut Env) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,
-            AwaitAppArg { fun: Ops, },
+            AwaitAppArg { fun: AstNode, },
         }
 
         let mut states = vec![];
         let mut ops_iter = ops.into_iter();
         loop {
-            let mut result: Option<Ops> = match ops_iter.next() {
+            let mut maybe_node: Option<AstNode> = match ops_iter.next() {
                 None =>
                     None,
                 Some(value @ Op::Const(..)) |
                 Some(value @ Op::Variable(..)) =>
-                    Some(Ops(vec![value])),
+                    Some(AstNode::Literal { value: value, }),
                 Some(Op::App) => {
                     states.push(State::AwaitAppFun);
                     continue;
@@ -46,25 +57,24 @@ impl Interpreter {
             };
 
             loop {
-                match (states.pop(), result) {
+                match (states.pop(), maybe_node) {
                     (None, None) =>
-                        return Err(Error::EmptyInput),
-                    (None, Some(ops)) =>
-                        return Ok(ops),
+                        return Ok(Ast::Empty),
+                    (None, Some(node)) =>
+                        return Ok(Ast::Tree(node)),
                     (Some(State::AwaitAppFun), None) =>
                         return Err(Error::NoAppFunProvided),
-                    (Some(State::AwaitAppFun), Some(ops)) => {
-                        states.push(State::AwaitAppArg { fun: ops, });
+                    (Some(State::AwaitAppFun), Some(node)) => {
+                        states.push(State::AwaitAppArg { fun: node, });
                         break;
                     },
                     (Some(State::AwaitAppArg { fun, }), None) =>
                         return Err(Error::NoAppArgProvided { fun, }),
-                    (Some(State::AwaitAppArg { fun, }), Some(ops)) => {
-                        let mut app_ops = Vec::with_capacity(1 + fun.0.len() + ops.0.len());
-                        app_ops.push(Op::App);
-                        app_ops.extend(fun.0);
-                        app_ops.extend(ops.0);
-                        result = Some(Ops(app_ops));
+                    (Some(State::AwaitAppArg { fun, }), Some(node)) => {
+                        maybe_node = Some(AstNode::App {
+                            fun: Box::new(fun),
+                            arg: Box::new(node),
+                        });
                     },
                 }
             }
@@ -76,8 +86,10 @@ impl Interpreter {
 mod tests {
     use super::{
         Env,
-        Interpreter,
+        Ast,
+        AstNode,
         Error,
+        Interpreter,
         super::super::{
             code::{
                 Op,
@@ -85,6 +97,7 @@ mod tests {
                 Fun,
                 Const,
                 Number,
+                Variable,
                 Modulation,
                 EncodedNumber,
                 PositiveNumber,
@@ -97,15 +110,15 @@ mod tests {
         let interpreter = Interpreter::new();
 
         assert_eq!(
-            interpreter.interpret(
+            interpreter.build_tree(
                 Ops(vec![]),
                 &mut Env::new(),
             ),
-            Err(Error::EmptyInput),
+            Ok(Ast::Empty),
         );
 
         assert_eq!(
-            interpreter.interpret(
+            interpreter.build_tree(
                 Ops(vec![
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
@@ -116,18 +129,18 @@ mod tests {
                 ]),
                 &mut Env::new(),
             ),
-            Ok(Ops(vec![
-                Op::Const(Const::EncodedNumber(EncodedNumber {
+            Ok(Ast::Tree(AstNode::Literal {
+                value: Op::Const(Const::EncodedNumber(EncodedNumber {
                     number: Number::Positive(PositiveNumber {
                         value: 1,
                     }),
                     modulation: Modulation::Demodulated,
                 })),
-            ])),
+            })),
         );
 
         assert_eq!(
-            interpreter.interpret(
+            interpreter.build_tree(
                 Ops(vec![Op::App]),
                 &mut Env::new(),
             ),
@@ -135,7 +148,7 @@ mod tests {
         );
 
         assert_eq!(
-            interpreter.interpret(
+            interpreter.build_tree(
                 Ops(vec![Op::App, Op::App]),
                 &mut Env::new(),
             ),
@@ -143,11 +156,48 @@ mod tests {
         );
 
         assert_eq!(
-            interpreter.interpret(
+            interpreter.build_tree(
                 Ops(vec![Op::App, Op::Const(Const::Fun(Fun::Inc))]),
                 &mut Env::new(),
             ),
-            Err(Error::NoAppArgProvided { fun: Ops(vec![Op::Const(Const::Fun(Fun::Inc))]), }),
+            Err(Error::NoAppArgProvided { fun: AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), }, }),
+        );
+
+        assert_eq!(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::App,
+                    Op::Variable(Variable {
+                        name: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                    }),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                ]),
+                &mut Env::new(),
+            ),
+            Ok(Ast::Tree(AstNode::App {
+                fun: Box::new(AstNode::Literal {
+                    value: Op::Variable(Variable {
+                        name: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                    }),
+                }),
+                arg: Box::new(AstNode::Literal {
+                    value: Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                }),
+            })),
         );
     }
 }

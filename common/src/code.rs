@@ -57,7 +57,7 @@ pub enum Fun {
     Div, // integer division
     Eq, // equality
     Lt, // strict less-than
-    Mod, // modulate
+    Mod, // modulate / modulate list
     Dem, // demodulate
     Send, // send
     Neg, // negate
@@ -67,6 +67,24 @@ pub enum Fun {
     True, // true (K combinator)
     False, // false (combinator)
     Pwr2, // power of two
+    I, // I combinator
+    Cons, // cons / pair
+    Car, // car / first
+    Cdr, // cdr / tail
+    Nil, // nil / empty list
+    IsNil, // is nil (is empty list)
+    LeftParen, // left parenthesis (list construction syntax)
+    Comma, // comma (list construction syntax)
+    RightParen, // right parenthesis (list construction syntax)
+    Vec, // vector (alias for cons)
+    Draw, // draw (communication with display)
+    Chkb, // checkerboard
+    MultipleDraw, // takes a list of lists of 2D-points and returns a list of plot canvases
+    Unknown1678847,
+    If0, // compare 1st argument to 0 and pick 2nd, else 3rd
+    Unknown33053392,
+    Unknown33554448,
+    Unknown67108929,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

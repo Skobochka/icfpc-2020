@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Script {
     pub statements: Vec<Statement>,
@@ -7,15 +5,18 @@ pub struct Script {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Statement {
-    Single(Op),
+    Single(Ops),
     EqBind(EqBind),
 }
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Ops(pub Vec<Op>);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Op {
     Const(Const),
     Variable(Variable),
-    App(App),
+    App,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -49,34 +50,12 @@ pub enum Fun {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Variable {
     pub name: Literal,
-    pub bind: Binding,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Binding {
-    Unbound,
-    Bound(Arc<Op>),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct App {
-    fun: Arc<Op>,
-    arg: Arc<Op>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct EqBind {
-    pub left: Arc<Op>,
-    pub right: Arc<Op>,
-}
-
-impl EqBind {
-    pub fn new(left_op: Op, right_op: Op) -> EqBind {
-        EqBind {
-            left: Arc::new(left_op),
-            right: Arc::new(right_op),
-        }
-    }
+    pub left: Ops,
+    pub right: Ops,
 }
 
 #[cfg(test)]
@@ -87,28 +66,37 @@ mod tests {
     fn syntax_00() {
         let _script = Script {
             statements: vec![
-                Statement::Single(Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
+                // 1
+                Statement::Single(Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                     value: 1,
-                })))),
-                Statement::EqBind(EqBind::new(
-                    Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
+                })))])),
+
+                // -1
+                Statement::Single(Ops(vec![Op::Const(Const::Literal(Literal::Negative(NegativeLiteral {
+                    value: -1,
+                })))])),
+
+                // 1 = 1
+                Statement::EqBind(EqBind {
+                    left: Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                         value: 1,
-                    }))),
-                    Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
+                    })))]),
+                    right: Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                         value: 1,
-                    }))),
-                )),
-                Statement::EqBind(EqBind::new(
-                    Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
+                    })))]),
+                }),
+
+                // 1 = x0
+                Statement::EqBind(EqBind {
+                    left: Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                         value: 1,
-                    }))),
-                    Op::Variable(Variable {
+                    })))]),
+                    right: Ops(vec![Op::Variable(Variable {
                         name: Literal::Positive(PositiveLiteral {
                             value: 0,
                         }),
-                        bind: Binding::Unbound,
-                    }),
-                )),
+                    })]),
+                }),
             ],
         };
     }

@@ -199,5 +199,57 @@ mod tests {
                 }),
             })),
         );
+
+        assert_eq!(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::App,
+                    Op::App,
+                    Op::Variable(Variable {
+                        name: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                    }),
+                    Op::Variable(Variable {
+                        name: Number::Positive(PositiveNumber {
+                            value: 2,
+                        }),
+                    }),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                ]),
+                &mut Env::new(),
+            ),
+            Ok(Ast::Tree(AstNode::App {
+                fun: Box::new(AstNode::App {
+                    fun: Box::new(AstNode::Literal {
+                        value: Op::Variable(Variable {
+                            name: Number::Positive(PositiveNumber {
+                                value: 1,
+                            }),
+                        }),
+                    }),
+                    arg: Box::new(AstNode::Literal {
+                        value: Op::Variable(Variable {
+                            name: Number::Positive(PositiveNumber {
+                                value: 2,
+                            }),
+                        }),
+                    }),
+                }),
+                arg: Box::new(AstNode::Literal {
+                    value: Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                }),
+            })),
+        );
     }
 }

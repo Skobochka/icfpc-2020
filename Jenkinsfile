@@ -43,6 +43,21 @@ pipeline {
     cleanup {
       sh "docker rmi icfpc2020-rust-org-image:${env.BUILD_TAG} || true" // Do not signal error if no image found
     }
+    always {
+      script {
+        def changeLog = "```";
+        for (int i = 0; i < currentBuild.changeSets.size(); i++) {
+          def entries = currentBuild.changeSets[i].items
+          for (int j = 0; j < entries.length; j++) {
+            def entry = entries[j]
+            changeLog += "\n * \"${entry.msg}\" by ${entry.author}"
+          }
+        }
+        changeLog += "```"
+
+        telegramSend "*${currentBuild.currentResult}*  ${env.JOB_NAME}\nChanges:\n${changeLog}[Build log](${BUILD_URL}/console)"
+      }
+    }
     success {
       script {
         def actions = []

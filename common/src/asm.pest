@@ -70,7 +70,7 @@ list_construction = {
   | "(" ~ expr ~ ("," ~ expr )* ~ ")"
 }
 
-statement = { expr+ ~ "=" ~ expr+ }
+statement = { expr+ ~ equal_sign ~ expr+ }
 
 // TODO: modulated literals support
 // modulated_number_literal = _{ modulated_positive_number_literal | modulated_negative_number_literal }

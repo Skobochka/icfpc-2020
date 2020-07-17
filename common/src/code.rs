@@ -6,7 +6,7 @@ pub struct Script {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Statement {
     Single(Ops),
-    EqBind(EqBind),
+    Equality(Equality),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -21,23 +21,35 @@ pub enum Op {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Const {
-    Literal(Literal),
+    EncodedNumber(EncodedNumber),
     Fun(Fun), // predefined functions from spec
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Literal {
-    Positive(PositiveLiteral),
-    Negative(NegativeLiteral),
+pub struct EncodedNumber {
+    pub number: Number,
+    pub modulation: Modulation,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct PositiveLiteral {
+pub enum Modulation {
+    Modulated,
+    Demodulated,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Number {
+    Positive(PositiveNumber),
+    Negative(NegativeNumber),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct PositiveNumber {
     pub value: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct NegativeLiteral {
+pub struct NegativeNumber {
     pub value: isize,
 }
 
@@ -81,11 +93,11 @@ pub enum Fun {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Variable {
-    pub name: Literal,
+    pub name: Number,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct EqBind {
+pub struct Equality {
     pub left: Ops,
     pub right: Ops,
 }
@@ -99,35 +111,62 @@ mod tests {
         let _script = Script {
             statements: vec![
                 // 1
-                Statement::Single(Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
-                    value: 1,
-                })))])),
+                Statement::Single(Ops(vec![
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                ])),
 
                 // -1
-                Statement::Single(Ops(vec![Op::Const(Const::Literal(Literal::Negative(NegativeLiteral {
-                    value: -1,
-                })))])),
+                Statement::Single(Ops(vec![
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Negative(NegativeNumber {
+                            value: -1,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                ])),
 
                 // 1 = 1
-                Statement::EqBind(EqBind {
-                    left: Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
-                        value: 1,
-                    })))]),
-                    right: Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
-                        value: 1,
-                    })))]),
+                Statement::Equality(Equality {
+                    left: Ops(vec![
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Positive(PositiveNumber {
+                                value: 1,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
+                    right: Ops(vec![
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Positive(PositiveNumber {
+                                value: 1,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
                 }),
 
                 // 1 = x0
-                Statement::EqBind(EqBind {
-                    left: Ops(vec![Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
-                        value: 1,
-                    })))]),
-                    right: Ops(vec![Op::Variable(Variable {
-                        name: Literal::Positive(PositiveLiteral {
-                            value: 0,
+                Statement::Equality(Equality {
+                    left: Ops(vec![
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Positive(PositiveNumber {
+                                value: 1,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
+                    right: Ops(vec![
+                        Op::Variable(Variable {
+                            name: Number::Positive(PositiveNumber {
+                                value: 0,
+                            }),
                         }),
-                    })]),
+                    ]),
                 }),
             ],
         };

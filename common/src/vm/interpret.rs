@@ -22,8 +22,7 @@ pub enum Error {
     NoAppArgProvided { fun: AstNode, },
     EvalEmptyTree,
     AppOnNumber { number: EncodedNumber, arg: AstNode, },
-    AppIncOnFun { fun: EvalFun, },
-    AppDecOnFun { fun: EvalFun, },
+    AppExpectsNumButFunProvided { fun: EvalFun, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -121,32 +120,40 @@ impl Interpreter {
 
             loop {
                 match (states.pop(), eval_op) {
-                    (None, EvalOp::Number { number, }) =>
+                    (None, EvalOp::Num { number, }) =>
                         return Ok(Ops(vec![Op::Const(Const::EncodedNumber(number))])),
-                    (None, EvalOp::Fun(EvalFun::Inc0)) =>
+                    (None, EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Inc0))) =>
                         return Ok(Ops(vec![Op::Const(Const::Fun(Fun::Inc))])),
-                    (None, EvalOp::Fun(EvalFun::Dec0)) =>
+                    (None, EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dec0))) =>
                         return Ok(Ops(vec![Op::Const(Const::Fun(Fun::Dec))])),
+                    (None, EvalOp::Fun(EvalFun::ArgFun(..))) =>
+                        unimplemented!(),
+                    (None, EvalOp::Fun(EvalFun::ArgAbs(..))) =>
+                        unimplemented!(),
+                    (None, EvalOp::Abs(ops)) =>
+                        return Ok(ops),
 
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Number { number, }) =>
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Num { number, }) =>
                         return Err(Error::AppOnNumber { number, arg, }),
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(fun)) => {
                         states.push(State::EvalAppArg { fun, });
                         ast_node = arg;
                         break;
                     },
+                    (Some(State::EvalAppFun { arg: _, }), EvalOp::Abs(..)) =>
+                        unimplemented!(),
 
                     // inc on positive number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::Inc0, }),
-                        EvalOp::Number {
+                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }),
+                        EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value, }),
                                 modulation,
                             },
                         },
                     ) =>
-                        eval_op = EvalOp::Number {
+                        eval_op = EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: value + 1, }),
                                 modulation,
@@ -154,15 +161,15 @@ impl Interpreter {
                         },
                     // inc on negative number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::Inc0, }),
-                        EvalOp::Number {
+                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }),
+                        EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value, }),
                                 modulation,
                             },
                         },
                     ) =>
-                        eval_op = EvalOp::Number {
+                        eval_op = EvalOp::Num {
                             number: EncodedNumber {
                                 number: if value + 1 < 0 {
                                     Number::Negative(NegativeNumber { value: value + 1, })
@@ -173,19 +180,24 @@ impl Interpreter {
                             },
                         },
                     // inc on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::Inc0, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppIncOnFun { fun, }),
+                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }), EvalOp::Fun(fun)) =>
+                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
+                    // inc on abs
+                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }), EvalOp::Abs(mut abs)) => {
+                        abs.0.insert(0, Op::Const(Const::Fun(Fun::Inc)));
+                        eval_op = EvalOp::Abs(abs);
+                    },
                     // dec on positive number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::Dec0, }),
-                        EvalOp::Number {
+                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }),
+                        EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value, }),
                                 modulation,
                             },
                         },
                     ) =>
-                        eval_op = EvalOp::Number {
+                        eval_op = EvalOp::Num {
                             number: EncodedNumber {
                                 number: if value == 0 {
                                     Number::Negative(NegativeNumber { value: -1, })
@@ -197,23 +209,35 @@ impl Interpreter {
                         },
                     // dec on negative number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::Dec0, }),
-                        EvalOp::Number {
+                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }),
+                        EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value, }),
                                 modulation,
                             },
                         },
                     ) =>
-                        eval_op = EvalOp::Number {
+                        eval_op = EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value - 1, }),
                                 modulation,
                             },
                         },
                     // dec on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::Dec0, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppDecOnFun { fun, }),
+                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }), EvalOp::Fun(fun)) =>
+                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
+                    // dec on abs
+                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }), EvalOp::Abs(mut abs)) => {
+                        abs.0.insert(0, Op::Const(Const::Fun(Fun::Dec)));
+                        eval_op = EvalOp::Abs(abs);
+                    },
+
+                    // fun arg invoke
+                    (Some(State::EvalAppArg { fun: EvalFun::ArgFun(..), }), _) =>
+                        unimplemented!(),
+                    // abs arg invoke
+                    (Some(State::EvalAppArg { fun: EvalFun::ArgAbs(..), }), _) =>
+                        unimplemented!(),
                 }
             }
         }
@@ -222,25 +246,41 @@ impl Interpreter {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum EvalOp {
-    Number { number: EncodedNumber, },
+    Num { number: EncodedNumber, },
     Fun(EvalFun),
+    Abs(Ops),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EvalFun {
+    ArgNum(EvalFunNum),
+    ArgFun(EvalFunFun),
+    ArgAbs(EvalFunAbs),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum EvalFunNum {
     Inc0,
     Dec0,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum EvalFunFun {
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum EvalFunAbs {
 }
 
 impl EvalOp {
     fn new(op: Op) -> EvalOp {
         match op {
             Op::Const(Const::EncodedNumber(number)) =>
-                EvalOp::Number { number, },
+                EvalOp::Num { number, },
             Op::Const(Const::Fun(Fun::Inc)) =>
-                EvalOp::Fun(EvalFun::Inc0),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Inc0)),
             Op::Const(Const::Fun(Fun::Dec)) =>
-                EvalOp::Fun(EvalFun::Dec0),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dec0)),
             Op::Const(Const::Fun(Fun::Sum)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Mul)) =>
@@ -305,7 +345,7 @@ impl EvalOp {
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unimplemented!(),
-            Op::Variable(var) =>
+            Op::Variable(..) =>
                 unimplemented!(),
             Op::App =>
                 unreachable!(),
@@ -322,6 +362,7 @@ mod tests {
         Error,
         Interpreter,
         EvalFun,
+        EvalFunNum,
         super::super::{
             code::{
                 Op,
@@ -648,7 +689,7 @@ mod tests {
                 ).unwrap(),
                 &mut Env::new(),
             ),
-            Err(Error::AppIncOnFun { fun: EvalFun::Inc0, }),
+            Err(Error::AppExpectsNumButFunProvided { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }),
         );
     }
 
@@ -745,7 +786,7 @@ mod tests {
                 ).unwrap(),
                 &mut Env::new(),
             ),
-            Err(Error::AppDecOnFun { fun: EvalFun::Dec0, }),
+            Err(Error::AppExpectsNumButFunProvided { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }),
         );
     }
 }

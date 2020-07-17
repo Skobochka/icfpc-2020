@@ -1,4 +1,4 @@
 #!/bin/sh
 
 cd app
-cargo test --offline
+exec cargo test --offline

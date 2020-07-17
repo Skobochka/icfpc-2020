@@ -13,8 +13,15 @@ pub enum Statement {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Op {
-    Literal(Literal),
+    Const(Const),
     Variable(Variable),
+    App(App),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Const {
+    Literal(Literal),
+    Fun(Fun),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -34,6 +41,12 @@ pub struct NegativeLiteral {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Fun {
+    Inc,
+    Dec,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Variable {
     pub name: Literal,
     pub bind: Binding,
@@ -43,6 +56,12 @@ pub struct Variable {
 pub enum Binding {
     Unbound,
     Bound(Arc<Op>),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct App {
+    fun: Arc<Op>,
+    arg: Arc<Op>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -68,21 +87,21 @@ mod tests {
     fn syntax_00() {
         let _script = Script {
             statements: vec![
-                Statement::Single(Op::Literal(Literal::Positive(PositiveLiteral {
+                Statement::Single(Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                     value: 1,
-                }))),
+                })))),
                 Statement::EqBind(EqBind::new(
-                    Op::Literal(Literal::Positive(PositiveLiteral {
+                    Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                         value: 1,
-                    })),
-                    Op::Literal(Literal::Positive(PositiveLiteral {
+                    }))),
+                    Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                         value: 1,
-                    })),
+                    }))),
                 )),
                 Statement::EqBind(EqBind::new(
-                    Op::Literal(Literal::Positive(PositiveLiteral {
+                    Op::Const(Const::Literal(Literal::Positive(PositiveLiteral {
                         value: 1,
-                    })),
+                    }))),
                     Op::Variable(Variable {
                         name: Literal::Positive(PositiveLiteral {
                             value: 0,

@@ -14,16 +14,16 @@ pub struct Ops(pub Vec<Op>);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Op {
-    Const(Const),
-    Variable(Variable),
-    App,
+    Const(Const), // constants
+    Variable(Variable), // variables
+    App, // function application
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Const {
     Bool(Bool),
     Literal(Literal),
-    Fun(Fun),
+    Fun(Fun), // predefined functions from spec
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -50,15 +50,23 @@ pub struct NegativeLiteral {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Fun {
-    Inc, // Successor
-    Dec, // Predecessor
-    Sum, // Sum
-    Mul, // Product
-    Div, // Integer Division
-    Eq, // Equality
-    Lt, // Strict Less-Than
-    Mod, // Modulate
-    Dem, // Demodulate
+    Inc, // successor
+    Dec, // predecessor
+    Sum, // sum
+    Mul, // product
+    Div, // integer division
+    Eq, // equality
+    Lt, // strict less-than
+    Mod, // modulate
+    Dem, // demodulate
+    Send, // send
+    Neg, // negate
+    S, // S combinator
+    C, // C combinator
+    B, // B combinator
+    True, // true (K combinator)
+    False, // false (combinator)
+    Pwr2, // power of two
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

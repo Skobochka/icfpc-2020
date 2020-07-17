@@ -75,6 +75,8 @@ pub enum Fun {
     MultipleDraw, // takes a list of lists of 2D-points and returns a list of plot canvases
     If0, // compare 1st argument to 0 and pick 2nd, else 3rd
     Interact, // interact
+    Modem, // ap dem ap mod x0
+    Galaxy, // 42
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

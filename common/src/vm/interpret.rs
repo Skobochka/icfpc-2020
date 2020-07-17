@@ -7,6 +7,7 @@ use super::{
         Number,
         EncodedNumber,
         PositiveNumber,
+        NegativeNumber,
     },
     Env,
 };
@@ -21,6 +22,8 @@ pub enum Error {
     NoAppArgProvided { fun: AstNode, },
     EvalEmptyTree,
     AppOnNumber { number: EncodedNumber, arg: AstNode, },
+    AppIncOnFun { fun: EvalFun, },
+    AppDecOnFun { fun: EvalFun, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -133,6 +136,7 @@ impl Interpreter {
                         break;
                     },
 
+                    // inc on positive number
                     (
                         Some(State::EvalAppArg { fun: EvalFun::Inc0, }),
                         EvalOp::Number {
@@ -148,21 +152,82 @@ impl Interpreter {
                                 modulation,
                             },
                         },
-
-                    _ =>
-                        unimplemented!(),
+                    // inc on negative number
+                    (
+                        Some(State::EvalAppArg { fun: EvalFun::Inc0, }),
+                        EvalOp::Number {
+                            number: EncodedNumber {
+                                number: Number::Negative(NegativeNumber { value, }),
+                                modulation,
+                            },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Number {
+                            number: EncodedNumber {
+                                number: if value + 1 < 0 {
+                                    Number::Negative(NegativeNumber { value: value + 1, })
+                                } else {
+                                    Number::Positive(PositiveNumber { value: (value + 1) as usize, })
+                                },
+                                modulation,
+                            },
+                        },
+                    // inc on fun
+                    (Some(State::EvalAppArg { fun: EvalFun::Inc0, }), EvalOp::Fun(fun)) =>
+                        return Err(Error::AppIncOnFun { fun, }),
+                    // dec on positive number
+                    (
+                        Some(State::EvalAppArg { fun: EvalFun::Dec0, }),
+                        EvalOp::Number {
+                            number: EncodedNumber {
+                                number: Number::Positive(PositiveNumber { value, }),
+                                modulation,
+                            },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Number {
+                            number: EncodedNumber {
+                                number: if value == 0 {
+                                    Number::Negative(NegativeNumber { value: -1, })
+                                } else {
+                                    Number::Positive(PositiveNumber { value: value - 1, })
+                                },
+                                modulation,
+                            },
+                        },
+                    // dec on negative number
+                    (
+                        Some(State::EvalAppArg { fun: EvalFun::Dec0, }),
+                        EvalOp::Number {
+                            number: EncodedNumber {
+                                number: Number::Negative(NegativeNumber { value, }),
+                                modulation,
+                            },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Number {
+                            number: EncodedNumber {
+                                number: Number::Negative(NegativeNumber { value: value - 1, }),
+                                modulation,
+                            },
+                        },
+                    // dec on fun
+                    (Some(State::EvalAppArg { fun: EvalFun::Dec0, }), EvalOp::Fun(fun)) =>
+                        return Err(Error::AppDecOnFun { fun, }),
                 }
             }
         }
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 enum EvalOp {
     Number { number: EncodedNumber, },
     Fun(EvalFun),
 }
 
-enum EvalFun {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum EvalFun {
     Inc0,
     Dec0,
 }
@@ -256,6 +321,7 @@ mod tests {
         AstNode,
         Error,
         Interpreter,
+        EvalFun,
         super::super::{
             code::{
                 Op,
@@ -267,6 +333,7 @@ mod tests {
                 Modulation,
                 EncodedNumber,
                 PositiveNumber,
+                NegativeNumber,
             },
         },
     };
@@ -450,11 +517,6 @@ mod tests {
             ])),
         );
 
-    }
-
-    #[test]
-    fn eval_fun_inc() {
-        let interpreter = Interpreter::new();
         assert_eq!(
             interpreter.eval(
                 interpreter.build_tree(
@@ -491,6 +553,11 @@ mod tests {
                 },
             }),
         );
+    }
+
+    #[test]
+    fn eval_fun_inc() {
+        let interpreter = Interpreter::new();
 
         assert_eq!(
             interpreter.eval(
@@ -518,5 +585,167 @@ mod tests {
             ])),
         );
 
+        assert_eq!(
+            interpreter.eval(
+                interpreter.build_tree(
+                    Ops(vec![
+                        Op::App,
+                        Op::Const(Const::Fun(Fun::Inc)),
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Negative(NegativeNumber {
+                                value: -1,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
+                ).unwrap(),
+                &mut Env::new(),
+            ),
+            Ok(Ops(vec![
+                Op::Const(Const::EncodedNumber(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 0,
+                    }),
+                    modulation: Modulation::Demodulated,
+                })),
+            ])),
+        );
+
+        assert_eq!(
+            interpreter.eval(
+                interpreter.build_tree(
+                    Ops(vec![
+                        Op::App,
+                        Op::Const(Const::Fun(Fun::Inc)),
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Negative(NegativeNumber {
+                                value: -2,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
+                ).unwrap(),
+                &mut Env::new(),
+            ),
+            Ok(Ops(vec![
+                Op::Const(Const::EncodedNumber(EncodedNumber {
+                    number: Number::Negative(NegativeNumber {
+                        value: -1,
+                    }),
+                    modulation: Modulation::Demodulated,
+                })),
+            ])),
+        );
+
+        assert_eq!(
+            interpreter.eval(
+                interpreter.build_tree(
+                    Ops(vec![
+                        Op::App,
+                        Op::Const(Const::Fun(Fun::Inc)),
+                        Op::Const(Const::Fun(Fun::Inc)),
+                    ]),
+                ).unwrap(),
+                &mut Env::new(),
+            ),
+            Err(Error::AppIncOnFun { fun: EvalFun::Inc0, }),
+        );
+    }
+
+    #[test]
+    fn eval_fun_dec() {
+        let interpreter = Interpreter::new();
+
+        assert_eq!(
+            interpreter.eval(
+                interpreter.build_tree(
+                    Ops(vec![
+                        Op::App,
+                        Op::Const(Const::Fun(Fun::Dec)),
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Positive(PositiveNumber {
+                                value: 1,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
+                ).unwrap(),
+                &mut Env::new(),
+            ),
+            Ok(Ops(vec![
+                Op::Const(Const::EncodedNumber(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 0,
+                    }),
+                    modulation: Modulation::Demodulated,
+                })),
+            ])),
+        );
+
+        assert_eq!(
+            interpreter.eval(
+                interpreter.build_tree(
+                    Ops(vec![
+                        Op::App,
+                        Op::Const(Const::Fun(Fun::Dec)),
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Negative(NegativeNumber {
+                                value: -1,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
+                ).unwrap(),
+                &mut Env::new(),
+            ),
+            Ok(Ops(vec![
+                Op::Const(Const::EncodedNumber(EncodedNumber {
+                    number: Number::Negative(NegativeNumber {
+                        value: -2,
+                    }),
+                    modulation: Modulation::Demodulated,
+                })),
+            ])),
+        );
+
+        assert_eq!(
+            interpreter.eval(
+                interpreter.build_tree(
+                    Ops(vec![
+                        Op::App,
+                        Op::Const(Const::Fun(Fun::Dec)),
+                        Op::Const(Const::EncodedNumber(EncodedNumber {
+                            number: Number::Positive(PositiveNumber {
+                                value: 0,
+                            }),
+                            modulation: Modulation::Demodulated,
+                        })),
+                    ]),
+                ).unwrap(),
+                &mut Env::new(),
+            ),
+            Ok(Ops(vec![
+                Op::Const(Const::EncodedNumber(EncodedNumber {
+                    number: Number::Negative(NegativeNumber {
+                        value: -1,
+                    }),
+                    modulation: Modulation::Demodulated,
+                })),
+            ])),
+        );
+
+        assert_eq!(
+            interpreter.eval(
+                interpreter.build_tree(
+                    Ops(vec![
+                        Op::App,
+                        Op::Const(Const::Fun(Fun::Dec)),
+                        Op::Const(Const::Fun(Fun::Dec)),
+                    ]),
+                ).unwrap(),
+                &mut Env::new(),
+            ),
+            Err(Error::AppDecOnFun { fun: EvalFun::Dec0, }),
+        );
     }
 }

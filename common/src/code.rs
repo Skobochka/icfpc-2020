@@ -5,7 +5,6 @@ pub struct Script {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Statement {
-    Single(Ops),
     Equality(Equality),
 }
 
@@ -110,26 +109,6 @@ mod tests {
     fn syntax_00() {
         let _script = Script {
             statements: vec![
-                // 1
-                Statement::Single(Ops(vec![
-                    Op::Const(Const::EncodedNumber(EncodedNumber {
-                        number: Number::Positive(PositiveNumber {
-                            value: 1,
-                        }),
-                        modulation: Modulation::Demodulated,
-                    })),
-                ])),
-
-                // -1
-                Statement::Single(Ops(vec![
-                    Op::Const(Const::EncodedNumber(EncodedNumber {
-                        number: Number::Negative(NegativeNumber {
-                            value: -1,
-                        }),
-                        modulation: Modulation::Demodulated,
-                    })),
-                ])),
-
                 // 1 = 1
                 Statement::Equality(Equality {
                     left: Ops(vec![

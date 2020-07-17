@@ -21,15 +21,8 @@ pub enum Op {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Const {
-    Bool(Bool),
     Literal(Literal),
     Fun(Fun), // predefined functions from spec
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Bool {
-    True,
-    False,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -80,11 +73,8 @@ pub enum Fun {
     Draw, // draw (communication with display)
     Chkb, // checkerboard
     MultipleDraw, // takes a list of lists of 2D-points and returns a list of plot canvases
-    Unknown1678847,
     If0, // compare 1st argument to 0 and pick 2nd, else 3rd
-    Unknown33053392,
-    Unknown33554448,
-    Unknown67108929,
+    Interact, // interact
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

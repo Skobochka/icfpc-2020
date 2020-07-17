@@ -21,8 +21,15 @@ pub enum Op {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Const {
+    Bool(Bool),
     Literal(Literal),
     Fun(Fun),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Bool {
+    True,
+    False,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -43,8 +50,15 @@ pub struct NegativeLiteral {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Fun {
-    Inc,
-    Dec,
+    Inc, // Successor
+    Dec, // Predecessor
+    Sum, // Sum
+    Mul, // Product
+    Div, // Integer Division
+    Eq, // Equality
+    Lt, // Strict Less-Than
+    Mod, // Modulate
+    Dem, // Demodulate
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

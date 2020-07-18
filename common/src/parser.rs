@@ -12,6 +12,7 @@ use super::code::{
     Equality,
     Variable,
     Fun,
+    Syntax,
 };
 
 use pest::{
@@ -108,15 +109,27 @@ impl AsmParser {
                 let name: usize = expr.into_inner().next().unwrap().as_str().parse().unwrap();
                 Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: name })})
             },
-            Rule::ap_func => {
-                Op::App
-            },
+            Rule::ap_func => Op::App,
+            Rule::left_paren => Op::Syntax(Syntax::LeftParen),
+            Rule::right_paren => Op::Syntax(Syntax::RightParen),
+            Rule::comma => Op::Syntax(Syntax::Comma),
             Rule::grid_positive_number_literal | Rule::grid_negative_number_literal =>
                 Op::Const(Const::EncodedNumber(self.parse_number(expr))),
             _ => {
                 println!("parse_expr() fail {:?}", expr.as_rule());
                 unreachable!()
             }
+        }
+    }
+
+    fn parse_list_construction_recursive(&self, node: Pair<Rule>, into: &mut Vec<Op>) {
+        match node.as_rule() {
+            Rule::list_construction => {
+                for expr in node.into_inner() {
+                    self.parse_list_construction_recursive(expr, into)
+                }
+            }
+            _ => into.push(self.parse_expr(node)),
         }
     }
 
@@ -131,10 +144,18 @@ impl AsmParser {
         loop {
             match part_iter.next() {
                 Some(node) => {
+                    // println!("parse_statement(): {:?} {:?}", node.as_rule(), node.as_str());
+
                     match node.as_rule() {
                         Rule::equal_sign => {
                             in_left = false;
                         },
+                        Rule::list_construction if in_left => {
+                            self.parse_list_construction_recursive(node, &mut left);
+                        }
+                        Rule::list_construction => {
+                            self.parse_list_construction_recursive(node, &mut right);
+                        }
                         _ if in_left => left.push(self.parse_expr(node)),
                         _ => right.push(self.parse_expr(node)),
                     }
@@ -152,7 +173,19 @@ impl AsmParser {
             Ok(mut exprs) => {
                 let expr = exprs.next().unwrap();
 
-                Ok(Ops(expr.into_inner().map(|expr_part| self.parse_expr(expr_part)).collect()))
+                let mut ops = Vec::<Op>::new();
+                for expr_part in expr.into_inner() {
+                    match expr_part.as_rule() {
+                        Rule::list_construction => {
+                            for node in expr_part.into_inner() {
+                                ops.push(self.parse_expr(node))
+                            }
+                        },
+                        _ => ops.push(self.parse_expr(expr_part)),
+                    }
+                }
+
+                Ok(Ops(ops))
             },
             Err(e) => {
                 return Err(Error::PestParsingError(e))
@@ -161,7 +194,7 @@ impl AsmParser {
     }
 
     pub fn parse_script(&self, input: &str) -> Result<Script, Error> {
-        let mut statements =  Vec::<Statement>::new();
+        let mut statements = Vec::<Statement>::new();
 
         for line in input.trim().lines() {
             let res = AsmParser::parse(Rule::statement, line);
@@ -260,6 +293,134 @@ mod tests {
                         ]),
                         right: Ops(vec![
                             Op::Const(Const::Fun(Fun::Inc))
+                        ]),
+                    }),
+                ],
+            }));
+    }
+
+    #[test]
+    fn list_constructions() {
+        let parser = AsmParser::new();
+        assert_eq!(
+            parser.parse_script(":1234 = ap cons (1, 2, 3)"),
+            Ok(Script {
+                statements: vec![
+                    Statement::Equality(Equality {
+                        left: Ops(vec![
+                            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1234 })})
+                        ]),
+                        right: Ops(vec![
+                            Op::App,
+                            Op::Const(Const::Fun(Fun::Cons)),
+                            Op::Syntax(Syntax::LeftParen),
+                            Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber {
+                                    value: 1,
+                                }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                            Op::Syntax(Syntax::Comma),
+                            Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber {
+                                    value: 2,
+                                }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                            Op::Syntax(Syntax::Comma),
+                            Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber {
+                                    value: 3,
+                                }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                            Op::Syntax(Syntax::RightParen),
+                        ]),
+                    }),
+                ],
+            }));
+    }
+
+    #[test]
+    fn list_constructions2() {
+        let parser = AsmParser::new();
+        assert_eq!(
+            parser.parse_script(":1234 = ap cons ( 1, x1, 3)"),
+            Ok(Script {
+                statements: vec![
+                    Statement::Equality(Equality {
+                        left: Ops(vec![
+                            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1234 })})
+                        ]),
+                        right: Ops(vec![
+                            Op::App,
+                            Op::Const(Const::Fun(Fun::Cons)),
+                            Op::Syntax(Syntax::LeftParen),
+                            Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber {
+                                    value: 1,
+                                }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                            Op::Syntax(Syntax::Comma),
+                            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1 })}),
+                            Op::Syntax(Syntax::Comma),
+                            Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber {
+                                    value: 3,
+                                }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                            Op::Syntax(Syntax::RightParen),
+                        ]),
+                    }),
+                ],
+            }));
+    }
+
+    #[test]
+    fn list_constructions_invalid() {
+        let parser = AsmParser::new();
+        assert!(parser.parse_script(":1234 = ap cons (").is_err());
+        assert!(parser.parse_script(":1234 = ap cons )").is_err());
+        assert!(parser.parse_script(":1234 = ap cons ,").is_err());
+        assert!(parser.parse_script(":1234 = ap cons (,)").is_err());
+        assert!(parser.parse_script(":1234 = ap cons (,,)").is_err());
+    }
+
+    #[test]
+    fn list_constructions_nested() {
+        let parser = AsmParser::new();
+        assert_eq!(
+            parser.parse_script(":1234 = ap cons ((1, x1), 3)"),
+            Ok(Script {
+                statements: vec![
+                    Statement::Equality(Equality {
+                        left: Ops(vec![
+                            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1234 })})
+                        ]),
+                        right: Ops(vec![
+                            Op::App,
+                            Op::Const(Const::Fun(Fun::Cons)),
+                            Op::Syntax(Syntax::LeftParen),
+                            Op::Syntax(Syntax::LeftParen),
+                            Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber {
+                                    value: 1,
+                                }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                            Op::Syntax(Syntax::Comma),
+                            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1 })}),
+                            Op::Syntax(Syntax::RightParen),
+                            Op::Syntax(Syntax::Comma),
+                            Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber {
+                                    value: 3,
+                                }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                            Op::Syntax(Syntax::RightParen),
                         ]),
                     }),
                 ],

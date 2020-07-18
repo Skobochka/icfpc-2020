@@ -1279,6 +1279,7 @@ impl EvalOp {
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, })) => {
                 let mut ops = vec![
                     Op::App,
+                    Op::App,
                     Op::Const(Const::Fun(Fun::C)),
                 ];
                 ops.extend(x.render().0);
@@ -1297,6 +1298,7 @@ impl EvalOp {
             },
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, })) => {
                 let mut ops = vec![
+                    Op::App,
                     Op::App,
                     Op::Const(Const::Fun(Fun::B)),
                 ];
@@ -1317,6 +1319,7 @@ impl EvalOp {
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, })) => {
                 let mut ops = vec![
                     Op::App,
+                    Op::App,
                     Op::Const(Const::Fun(Fun::S)),
                 ];
                 ops.extend(x.render().0);
@@ -1328,6 +1331,7 @@ impl EvalOp {
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 { x, })) => {
                 let mut ops = vec![
                     Op::App,
+                    Op::App,
                     Op::Const(Const::Fun(Fun::Cons)),
                 ];
                 ops.extend(x.render().0);
@@ -1335,6 +1339,7 @@ impl EvalOp {
             },
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { x, y, })) => {
                 let mut ops = vec![
+                    Op::App,
                     Op::App,
                     Op::Const(Const::Fun(Fun::Cons)),
                 ];

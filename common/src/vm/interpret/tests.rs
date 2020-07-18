@@ -42,6 +42,7 @@ mod cdr;
 mod nil;
 mod is_nil;
 mod env;
+mod various;
 
 #[test]
 fn ast_tree_basic() {

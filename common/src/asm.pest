@@ -1,0 +1,97 @@
+separator = _{ " " | "\t" }
+
+grid_number_literal = _{ grid_negative_number_literal | grid_positive_number_literal }
+  grid_negative_number_literal = @{ "-" ~ ASCII_DIGIT+ }
+  grid_positive_number_literal = @{ ASCII_DIGIT+ }
+
+variable_name = { ASCII_DIGIT+ }
+variable = ${ "x" ~ variable_name }
+
+func = _{ named_func | unnamed_func }
+
+ap_func = { "ap" }
+
+named_func = {
+    inc_ | dec_ | add_ | mul_ | div_ | neg_ | pwr2_
+  | mod_ | dem_ | send_
+  | cons_ | car_ | cdr_ | nil_ | isnil_ | vec_
+  | draw_ | multipledraw_ | checkerboard_
+  | modem_ | interact_ | f38_ | statelessdraw_
+  | s_ | c_ | b_ | i_ | if0_
+  | true_ | false_ | eq_ | lt_
+  | galaxy_
+}
+  dec_ = { "dec" }
+  inc_ = { "inc" }
+  add_ = { "add" }
+  mul_ = { "mul" }
+  div_ = { "div" }
+  neg_ = { "neg" }
+  pwr2_ = { "pwr2" }
+
+  true_ = { "t" }
+  false_ = { "f" }
+  eq_ = { "eq" }
+  lt_ = { "lt" }
+
+  mod_ = { "mod" }
+  dem_ = { "dem" }
+  send_ = { "send" }
+
+  s_ = { "s" }
+  c_ = { "c" }
+  b_ = { "b" }
+  i_ = { "i" }
+  if0_ = { "if0" }
+
+  cons_ = { "cons" }
+  car_ = { "car" }
+  cdr_ = { "cdr" }
+  nil_ = { "nil" }
+  isnil_ = { "isnil" }
+  vec_ = { "vec" }
+
+  draw_ = { "draw" }
+  multipledraw_ = { "multipledraw" }
+  checkerboard_ = { "checkerboard" }
+
+  modem_ = { "modem" }
+  interact_ = { "interact" }
+  f38_ = { "f38" } // TODO: better name?
+  statelessdraw_ = { "statelessdraw" }
+
+  galaxy_ = { "galaxy" }
+
+// Corresponds to unknown (yet?) function with the number
+func_name = { ASCII_DIGIT+ }
+unnamed_func = ${ ":" ~ func_name }
+
+equal_sign = @{ "=" }
+
+expr_part = _{ grid_number_literal | variable | func | ap_func | list_construction }
+
+list_construction = {
+    "(" ~ ")"
+  | "(" ~ expr_part ~ ("," ~ expr_part )* ~ ")"
+}
+
+statement = {
+    expr_part
+  ~ (separator+ ~ expr_part)*
+  ~ separator*
+  ~ equal_sign
+  ~ separator*
+  ~ expr_part
+  ~ (separator+ ~ expr_part)*
+}
+
+script = {
+    SOI
+  ~ statement*
+  ~ &EOI
+}
+
+// TODO: modulated literals support
+// modulated_number_literal = _{ modulated_positive_number_literal | modulated_negative_number_literal }
+//   modulated_positive_number_literal = { "[" ~ ASCII_DIGIT+ ~ "]"}
+//   modulated_negative_number_literal = @{ "[" ~ "-" ~ ASCII_DIGIT+ ~ "]" }

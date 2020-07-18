@@ -10,6 +10,7 @@ use super::code::{
     Statement,
     Ops,
     Equality,
+    Variable,
     Fun,
 };
 
@@ -53,12 +54,15 @@ impl AsmParser {
     }
 
     pub fn parse_func(&self, func: Pair<Rule>) -> Fun {
-        println!("{:?}", func.as_rule());
-
         match func.as_rule() {
             Rule::dec_ => Fun::Dec,
             Rule::inc_ => Fun::Inc,
             Rule::add_ => Fun::Sum,
+            Rule::mul_ => Fun::Mul,
+            Rule::div_ => Fun::Div,
+
+            Rule::vec_ => Fun::Vec,
+            Rule::cons_ => Fun::Cons,
             _ => {
                 unreachable!()
             }
@@ -71,6 +75,13 @@ impl AsmParser {
                 let mut inner_rules = expr.into_inner();
                 Op::Const(Const::Fun(self.parse_func(inner_rules.next().unwrap())))
             },
+            Rule::variable => {
+                let name: usize = expr.into_inner().next().unwrap().as_str().parse().unwrap();
+                Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: name })})
+            },
+            Rule::ap_func => {
+                Op::App
+            },
             Rule::grid_positive_number_literal | Rule::grid_negative_number_literal =>
                 Op::Const(Const::EncodedNumber(self.parse_number(expr))),
             _ => {
@@ -81,21 +92,29 @@ impl AsmParser {
     }
 
     pub fn parse_statement(&self, statement: Pair<Rule>) -> Statement {
-        // FIXME: this is just ugly :(
-        // let mut inner_rules = statement.into_inner().collect::<Vec<&Pair<Rule>>>();
-        let mut inner_rules = statement.into_inner();
-        Statement::Equality ( Equality {
 
-            left: Ops(inner_rules.clone().take_while(|expr| match expr.as_rule() {
-                Rule::equal_sign => false,
-                _ => true,
-            }).map(|expr| self.parse_expr(expr)).collect()),
+        let mut part_iter = statement.into_inner();
 
-            right: Ops(inner_rules.clone().skip_while(|expr| match expr.as_rule() {
-                Rule::equal_sign => false,
-                _ => true,
-            }).skip(1).map(|expr| self.parse_expr(expr)).collect()),
-        })
+        let mut in_left = true;
+        let mut left = Vec::<Op>::new();
+        let mut right = Vec::<Op>::new();
+        
+        loop {
+            match part_iter.next() {
+                Some(node) => {
+                    match node.as_rule() {
+                        Rule::equal_sign => {
+                            in_left = false;
+                        },
+                        _ if in_left => left.push(self.parse_expr(node)),
+                        _ => right.push(self.parse_expr(node)),
+                    }
+                },
+                None => break,
+            }
+        }
+        
+        Statement::Equality ( Equality { left: Ops(left), right: Ops(right) } )
     }
 
     pub fn parse_script(&self, input: &str) -> Result<Script, Error> {
@@ -115,13 +134,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn debug_test() {
+    fn simple_00() {
         let parser = AsmParser::new();
         assert_eq!(
-            parser.parse_script("dec = inc\nadd 1 = ap dec 1\nvec  = cons x0"),
-            // parser.parse_script("cc = ss"),
+            parser.parse_script("dec = inc"),
             Ok(Script {
-                statements: vec![]
+                statements: vec![
+                    Statement::Equality(Equality {
+                        left: Ops(vec![
+                            Op::Const(Const::Fun(Fun::Dec))
+                        ]),
+                        right: Ops(vec![
+                            Op::Const(Const::Fun(Fun::Inc))
+                        ]),
+                    }),
+                ],
             }));
+    }
+
+    #[test]
+    fn regression_nospace() {
+        let parser = AsmParser::new();
+        assert!(parser.parse_script("cc = ss").is_err());
     }
 }

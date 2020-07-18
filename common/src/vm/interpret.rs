@@ -304,7 +304,7 @@ impl Interpreter {
                     ) =>
                         eval_op = EvalOp::Num {
                             number: EncodedNumber {
-                                number: if value_a as isize + value_b < 0 {
+                                number: if (value_a as isize) + value_b < 0 {
                                     Number::Negative(NegativeNumber { value: value_a as isize + value_b, })
                                 } else {
                                     Number::Positive(PositiveNumber { value: (value_a as isize + value_b) as usize, })
@@ -653,13 +653,37 @@ impl Interpreter {
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // fun on abs
-                    (Some(State::EvalAppArg { fun }), EvalOp::Abs(abs)) => {
-                        let fun_ops = EvalOp::Fun(fun).render();
-                        let mut ops = Vec::with_capacity(1 + fun_ops.0.len() + abs.0.len());
-                        ops.push(Op::App);
-                        ops.extend(fun_ops.0);
-                        ops.extend(abs.0);
-                        eval_op = EvalOp::Abs(Ops(ops));
+                    (Some(State::EvalAppArg { fun }), EvalOp::Abs(arg_ast_node)) => {
+                        let mut fun_ops_iter = EvalOp::Fun(fun)
+                            .render()
+                            .0
+                            .into_iter();
+                        let ast_node = match fun_ops_iter.next() {
+                            None =>
+                                unreachable!(),
+                            Some(op_a) =>
+                                match fun_ops_iter.next() {
+                                    None =>
+                                        AstNode::App {
+                                            fun: Box::new(AstNode::Literal { value: op_a, }),
+                                            arg: Box::new(arg_ast_node),
+                                        },
+                                    Some(op_b) =>
+                                        match fun_ops_iter.next() {
+                                            None =>
+                                                AstNode::App {
+                                                    fun: Box::new(AstNode::App {
+                                                        fun: Box::new(AstNode::Literal { value: op_a, }),
+                                                        arg: Box::new(AstNode::Literal { value: op_b, }),
+                                                    }),
+                                                    arg: Box::new(arg_ast_node),
+                                                },
+                                            Some(..) =>
+                                                unreachable!(),
+                                        },
+                                },
+                        };
+                        eval_op = EvalOp::Abs(ast_node);
                     },
 
                     // fun arg invoke
@@ -678,7 +702,7 @@ impl Interpreter {
 enum EvalOp {
     Num { number: EncodedNumber, },
     Fun(EvalFun),
-    Abs(Ops),
+    Abs(AstNode),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -706,6 +730,8 @@ pub enum EvalFunFun {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EvalFunAbs {
+    True0,
+    True1 { captured: AstNode, },
 }
 
 impl EvalOp {
@@ -742,7 +768,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::B)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::True)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
             Op::Const(Const::Fun(Fun::False)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Pwr2)) =>
@@ -782,13 +808,13 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unimplemented!(),
             Op::Variable(var) =>
-                EvalOp::Abs(Ops(vec![Op::Variable(var)])),
+                EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
             Op::App =>
                 unreachable!(),
         }
     }
 
-    pub fn render(self) -> Ops {
+    fn render(self) -> Ops {
         match self {
             EvalOp::Num { number, } =>
                 Ops(vec![Op::Const(Const::EncodedNumber(number))]),
@@ -821,8 +847,47 @@ impl EvalOp {
                 unimplemented!(),
             EvalOp::Fun(EvalFun::ArgAbs(..)) =>
                 unimplemented!(),
-            EvalOp::Abs(ops) =>
-                ops,
+            EvalOp::Abs(ast_node) =>
+                ast_node.render(),
+        }
+    }
+}
+
+impl AstNode {
+    pub fn render(self) -> Ops {
+        enum State {
+            RenderAppFun { arg: AstNode, },
+            RenderAppArg,
+        }
+
+        let mut ops = vec![];
+        let mut ast_node = self;
+        let mut stack = vec![];
+        loop {
+            match ast_node {
+                AstNode::Literal { value, } =>
+                    ops.push(value),
+                AstNode::App { fun, arg, } => {
+                    ops.push(Op::App);
+                    stack.push(State::RenderAppFun { arg: *arg, });
+                    ast_node = *fun;
+                    continue;
+                },
+            }
+
+            loop {
+                match stack.pop() {
+                    None =>
+                        return Ops(ops),
+                    Some(State::RenderAppFun { arg, }) => {
+                        stack.push(State::RenderAppArg);
+                        ast_node = arg;
+                        break;
+                    },
+                    Some(State::RenderAppArg) =>
+                        (),
+                }
+            }
         }
     }
 }

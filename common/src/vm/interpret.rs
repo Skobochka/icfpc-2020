@@ -6,8 +6,10 @@ use super::{
         Ops,
         Fun,
         Const,
+        Coord,
         Number,
         Syntax,
+        Picture,
         Variable,
         Modulation,
         EncodedNumber,
@@ -43,6 +45,8 @@ pub enum Error {
     ListSyntaxUnexpectedNode { node: AstNode, },
     ListSyntaxSeveralCommas,
     ListSyntaxClosingAfterComma,
+    InvalidCoordForDrawArg,
+    ExpectedOnlyTwoCoordsPointForDrawArg,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -518,6 +522,14 @@ impl Interpreter {
                                 true_clause,
                             EncodedNumber { .. } =>
                                 false_clause,
+                        };
+                        break;
+                    },
+
+                    // Draw0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0))) => {
+                        ast_node = AstNode::Literal {
+                            value: Op::Const(Const::Picture(self.eval_draw(arg, env)?)),
                         };
                         break;
                     },
@@ -1291,6 +1303,55 @@ impl Interpreter {
             }
         }
     }
+
+    fn eval_draw(&self, points: AstNode, env: &Env) -> Result<Picture, Error> {
+        let mut points_vec = Vec::new();
+        let mut points_ops = points.render();
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &points_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let mut coord_vec = Vec::with_capacity(2);
+            let mut coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env)?;
+            loop {
+                let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &coord_ops, env)?;
+                if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                    break;
+                }
+
+                let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env)?;
+                match (ops.0.len(), ops.0.pop()) {
+                    (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                        coord_vec.push(number),
+                    _ =>
+                        return Err(Error::InvalidCoordForDrawArg),
+                }
+
+                coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env)?;
+            }
+            if coord_vec.len() != 2 {
+                return Err(Error::ExpectedOnlyTwoCoordsPointForDrawArg);
+            }
+            points_vec.push(Coord {
+                y: coord_vec.pop().unwrap(),
+                x: coord_vec.pop().unwrap(),
+            });
+
+            points_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &points_ops, env)?;
+        }
+        Ok(Picture { points: points_vec, })
+    }
+
+    fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env) -> Result<Ops, Error> {
+        let mut script = Ops(Vec::with_capacity(ops.len() + on_script.0.len()));
+        script.0.clear();
+        script.0.extend(ops.iter().cloned());
+        script.0.extend(on_script.0.iter().cloned());
+        let tree = self.build_tree(script)?;
+        self.eval(tree, env)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1355,6 +1416,7 @@ pub enum EvalFunAbs {
     IsNil0,
     IfZero1 { cond: EncodedNumber, },
     IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
+    Draw0,
 }
 
 impl EvalOp {
@@ -1411,7 +1473,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Vec)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0)),
             Op::Const(Const::Fun(Fun::Draw)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)),
             Op::Const(Const::Fun(Fun::Chkb)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::MultipleDraw)) =>
@@ -1595,12 +1657,12 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
-
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Draw))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Dem))]),
-
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::If0))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, })) =>

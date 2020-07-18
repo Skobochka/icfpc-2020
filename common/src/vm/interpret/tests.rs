@@ -41,6 +41,7 @@ mod car;
 mod cdr;
 mod nil;
 mod is_nil;
+mod env;
 mod various;
 
 #[test]

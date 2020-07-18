@@ -12,7 +12,7 @@ use super::{
 };
 
 #[test]
-fn eval() {
+fn eval_huge() {
     let interpreter = Interpreter::new();
 
     // ap ap b ap b ap cons 2 ap ap c ap ap b b cons ap ap c cons nil
@@ -83,4 +83,57 @@ fn eval() {
         ])),
     );
 
+}
+
+#[test]
+fn eval_partial() {
+    let interpreter = Interpreter::new();
+
+    // ap add 1
+    assert_eq!(
+        interpreter.eval(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Sum)),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 2,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                ]),
+            ).unwrap(),
+            &mut Env::new(),
+        ),
+        Ok(Ops(vec![
+            Op::App,
+            Op::Const(Const::Fun(Fun::Sum)),
+            Op::Const(Const::EncodedNumber(EncodedNumber {
+                number: Number::Positive(PositiveNumber {
+                    value: 2,
+                }),
+                modulation: Modulation::Demodulated,
+            })),
+        ])),
+    );
+
+    // ap cons nil
+    assert_eq!(
+        interpreter.eval(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Cons)),
+                    Op::Const(Const::Fun(Fun::Nil)),
+                ]),
+            ).unwrap(),
+            &mut Env::new(),
+        ),
+        Ok(Ops(vec![
+            Op::App,
+            Op::Const(Const::Fun(Fun::Cons)),
+            Op::Const(Const::Fun(Fun::Nil)),
+        ])),
+    );
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::{
     super::code::{
         Op,
@@ -5,12 +7,15 @@ use super::{
         Fun,
         Const,
         Number,
+        Variable,
         Modulation,
         EncodedNumber,
         PositiveNumber,
         NegativeNumber,
+        Equality,
+        Script,
+        Statement,
     },
-    Env,
 };
 
 #[cfg(test)]
@@ -44,6 +49,54 @@ pub enum AstNode {
     App { fun: Box<AstNode>, arg: Box<AstNode>, },
 }
 
+// TODO: rewrite rules
+
+#[derive(Debug)]
+pub struct Env {
+    forward: HashMap<AstNode, AstNode>,
+    backward: HashMap<AstNode, AstNode>,
+}
+
+impl Env {
+    pub fn new() -> Env {
+        Env {
+            forward: HashMap::new(),
+            backward: HashMap::new(),
+        }
+    }
+
+    pub fn add_equality(&mut self, left: Ast, right: Ast) {
+        if let (Ast::Tree(left), Ast::Tree(right)) = (left, right) {
+            if let AstNode::Literal { value: Op::Variable(..), } = left {
+                self.forward.insert(left.clone(), right.clone());
+            }
+            if let AstNode::Literal { value: Op::Variable(..), } = right {
+                self.backward.insert(right, left);
+            }
+        }
+    }
+
+    pub fn lookup_ast(&self, key: &AstNode) -> Option<&AstNode> {
+        match self.forward.get(key) {
+            Some(o) => {
+                Some(o)
+            },
+            None => match self.backward.get(key) {
+                Some(o) => {
+                    Some(o)
+                },
+                None =>
+                    None,
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.forward.clear();
+        self.backward.clear();
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
@@ -51,18 +104,26 @@ impl Interpreter {
         }
     }
 
-    pub fn build_tree(&self, Ops(ops): Ops) -> Result<Ast, Error> {
+    pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,
             AwaitAppArg { fun: AstNode, },
         }
 
         let mut states = vec![];
-        let mut ops_iter = ops.into_iter();
+        ops.reverse();
         loop {
-            let mut maybe_node: Option<AstNode> = match ops_iter.next() {
+            let mut maybe_node: Option<AstNode> = match ops.pop() {
                 None =>
                     None,
+                Some(Op::Const(Const::Fun(Fun::Galaxy))) =>
+                    Some(AstNode::Literal {
+                        value: Op::Variable(Variable {
+                            name: Number::Negative(NegativeNumber {
+                                value: -1,
+                            }),
+                        }),
+                    }),
                 Some(value @ Op::Const(..)) |
                 Some(value @ Op::Variable(..)) =>
                     Some(AstNode::Literal { value: value, }),
@@ -97,7 +158,46 @@ impl Interpreter {
         }
     }
 
-    pub fn eval(&self, ast: Ast, env: &mut Env) -> Result<Ops, Error> {
+    pub fn eval_script(&self, script: Script) -> Result<Env, Error> {
+        let mut env = Env::new();
+
+        for Statement::Equality(eq) in script.statements {
+            let _next_eq = self.eval_equality(eq, &mut env)?;
+        }
+
+        Ok(env)
+    }
+
+    fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
+        let Equality { left, right } = eq;
+
+        let left_ast = self.build_tree(left)?;
+        // let left = self.eval(left_ast, env)?;
+
+        let right_ast = self.build_tree(right)?;
+        // let right = self.eval(right_ast, env)?;
+
+        env.add_equality(
+            left_ast,
+            right_ast,
+            // self.build_tree(left.clone())?,
+            // self.build_tree(right.clone())?,
+        );
+
+        Ok(())
+        // Ok(Equality { left, right, })
+    }
+
+    pub fn lookup_env(&self, env: &Env, key: Ops) -> Result<Option<Ops>, Error> {
+        if let Ast::Tree(ast_node) = self.build_tree(key)? {
+            if let Some(ast_node) = env.lookup_ast(&ast_node) {
+                return Ok(Some(ast_node.clone().render()))
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn eval(&self, ast: Ast, env: &Env) -> Result<Ops, Error> {
         match ast {
             Ast::Empty =>
                 Err(Error::EvalEmptyTree),
@@ -106,7 +206,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_tree(&self, mut ast_node: AstNode, _env: &mut Env) -> Result<Ops, Error> {
+    fn eval_tree(&self, mut ast_node: AstNode, env: &Env) -> Result<Ops, Error> {
         enum State {
             EvalAppFun { arg: AstNode, },
             EvalAppArgNum { fun: EvalFunNum, },
@@ -128,6 +228,17 @@ impl Interpreter {
 
             loop {
                 match (states.pop(), eval_op) {
+                    (None, EvalOp::Abs(top_ast_node)) => {
+                        match env.lookup_ast(&top_ast_node) {
+                            Some(subst_ast_node) => {
+                                ast_node = subst_ast_node.clone();
+                                break;
+                            },
+                            None =>
+                                return Ok(EvalOp::Abs(top_ast_node).render()),
+                        }
+                    },
+
                     (None, eval_op) =>
                         return Ok(eval_op.render()),
 
@@ -300,13 +411,6 @@ impl Interpreter {
                         break;
                     },
 
-                    // unresolved fun on something
-                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
-                        eval_op = EvalOp::Abs(AstNode::App {
-                            fun: Box::new(fun_ast_node),
-                            arg: Box::new(arg_ast_node),
-                        }),
-
                     // IsNil on a number
                     (Some(State::EvalAppArgIsNil), EvalOp::Num { number, }) =>
                         return Err(Error::IsNilAppOnANumber { number, }),
@@ -325,10 +429,35 @@ impl Interpreter {
 
                     // IsNil on an abstract
                     (Some(State::EvalAppArgIsNil), EvalOp::Abs(arg_ast_node)) =>
-                        eval_op = EvalOp::Abs(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
-                            arg: Box::new(arg_ast_node),
-                        }),
+                        match env.lookup_ast(&arg_ast_node) {
+                            Some(subst_ast_node) => {
+                                states.push(State::EvalAppArgIsNil);
+                                ast_node = subst_ast_node.clone();
+                                break;
+                            },
+                            None =>
+                                eval_op = EvalOp::Abs(AstNode::App {
+                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
+                                    arg: Box::new(arg_ast_node),
+                                }),
+                        },
+
+                    // unresolved fun on something
+                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
+                        match env.lookup_ast(&fun_ast_node) {
+                            Some(subst_ast_node) => {
+                                ast_node = AstNode::App {
+                                    fun: Box::new(subst_ast_node.clone()),
+                                    arg: Box::new(arg_ast_node),
+                                };
+                                break;
+                            }
+                            None =>
+                                eval_op = EvalOp::Abs(AstNode::App {
+                                    fun: Box::new(fun_ast_node),
+                                    arg: Box::new(arg_ast_node),
+                                }),
+                        },
 
                     // inc on positive number
                     (
@@ -1026,45 +1155,53 @@ impl Interpreter {
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // fun on abs
-                    (Some(State::EvalAppArgNum { fun }), EvalOp::Abs(arg_ast_node)) => {
-                        let mut fun_ops_iter = EvalOp::Fun(EvalFun::ArgNum(fun))
-                            .render()
-                            .0
-                            .into_iter();
-                        let ast_node = match fun_ops_iter.next() {
-                            None =>
-                                panic!("render failure: expected op, but got none"),
-                            Some(Op::App) =>
-                                match fun_ops_iter.next() {
+                    (Some(State::EvalAppArgNum { fun }), EvalOp::Abs(arg_ast_node)) =>
+                        match env.lookup_ast(&arg_ast_node) {
+                            Some(subst_ast_node) => {
+                                states.push(State::EvalAppArgNum { fun, });
+                                ast_node = subst_ast_node.clone();
+                                break;
+                            },
+                            None => {
+                                let mut fun_ops_iter = EvalOp::Fun(EvalFun::ArgNum(fun))
+                                    .render()
+                                    .0
+                                    .into_iter();
+                                let ast_node = match fun_ops_iter.next() {
                                     None =>
-                                        panic!("render failure: expected op fun, but got none"),
-                                    Some(op_a) =>
+                                        panic!("render failure: expected op, but got none"),
+                                    Some(Op::App) =>
                                         match fun_ops_iter.next() {
                                             None =>
-                                                panic!("render failure: expected op {:?} arg, but got none", op_a),
-                                            Some(op_b) =>
+                                                panic!("render failure: expected op fun, but got none"),
+                                            Some(op_a) =>
                                                 match fun_ops_iter.next() {
                                                     None =>
-                                                        AstNode::App {
-                                                            fun: Box::new(AstNode::App {
-                                                                fun: Box::new(AstNode::Literal { value: op_a, }),
-                                                                arg: Box::new(AstNode::Literal { value: op_b, }),
-                                                            }),
-                                                            arg: Box::new(arg_ast_node),
+                                                        panic!("render failure: expected op {:?} arg, but got none", op_a),
+                                                    Some(op_b) =>
+                                                        match fun_ops_iter.next() {
+                                                            None =>
+                                                                AstNode::App {
+                                                                    fun: Box::new(AstNode::App {
+                                                                        fun: Box::new(AstNode::Literal { value: op_a, }),
+                                                                        arg: Box::new(AstNode::Literal { value: op_b, }),
+                                                                    }),
+                                                                    arg: Box::new(arg_ast_node),
+                                                                },
+                                                            Some(..) =>
+                                                                unreachable!(),
                                                         },
-                                                    Some(..) =>
-                                                        unreachable!(),
                                                 },
                                         },
-                                },
-                            Some(op_a) =>
-                                AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: op_a, }),
-                                    arg: Box::new(arg_ast_node),
-                                },
-                        };
-                        eval_op = EvalOp::Abs(ast_node);
-                    },
+                                    Some(op_a) =>
+                                        AstNode::App {
+                                            fun: Box::new(AstNode::Literal { value: op_a, }),
+                                            arg: Box::new(arg_ast_node),
+                                        },
+                                };
+                                eval_op = EvalOp::Abs(ast_node);
+                            },
+                        },
                 }
             }
         }
@@ -1204,7 +1341,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Modem)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
-                unimplemented!(),
+                unreachable!(), // should be renamed to variable with name "-1"
             Op::Variable(var) =>
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
             Op::App =>
@@ -1348,7 +1485,6 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Cons))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 { x, })) => {
                 let mut ops = vec![
-                    Op::App,
                     Op::App,
                     Op::Const(Const::Fun(Fun::Cons)),
                 ];

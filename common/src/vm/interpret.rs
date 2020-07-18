@@ -194,6 +194,30 @@ impl Interpreter {
                         break;
                     },
 
+                    // B0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 {
+                            x: arg,
+                        })),
+
+                    // B1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 { x, }))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 {
+                            x, y: arg,
+                        })),
+
+                    // B2 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, }))) => {
+                        ast_node = AstNode::App {
+                            fun: Box::new(x),
+                            arg: Box::new(AstNode::App {
+                                fun: Box::new(y),
+                                arg: Box::new(arg),
+                            }),
+                        };
+                        break;
+                    },
+
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         eval_op = EvalOp::Abs(AstNode::App {
@@ -927,6 +951,9 @@ pub enum EvalFunAbs {
     C0,
     C1 { x: AstNode, },
     C2 { x: AstNode, y: AstNode, },
+    B0,
+    B1 { x: AstNode, },
+    B2 { x: AstNode, y: AstNode, },
 }
 
 impl EvalOp {
@@ -961,7 +988,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::C)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C0)),
             Op::Const(Const::Fun(Fun::B)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B0)),
             Op::Const(Const::Fun(Fun::True)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
             Op::Const(Const::Fun(Fun::False)) =>
@@ -1095,6 +1122,25 @@ impl EvalOp {
                 let mut ops = vec![
                     Op::App,
                     Op::Const(Const::Fun(Fun::C)),
+                ];
+                ops.extend(x.render().0);
+                ops.extend(y.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::B))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 { x, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::B)),
+                ];
+                ops.extend(x.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::B)),
                 ];
                 ops.extend(x.render().0);
                 ops.extend(y.render().0);

@@ -146,10 +146,24 @@ impl AsmParser {
         Statement::Equality ( Equality { left: Ops(left), right: Ops(right) } )
     }
 
+    pub fn parse_expression(&self, input: &str) -> Result<Ops, Error> {
+        let res = AsmParser::parse(Rule::expr, input);
+        match res {
+            Ok(mut exprs) => {
+                let expr = exprs.next().unwrap();
+
+                Ok(Ops(expr.into_inner().map(|expr_part| self.parse_expr(expr_part)).collect()))
+            },
+            Err(e) => {
+                return Err(Error::PestParsingError(e))
+            },
+        }
+    }
+
     pub fn parse_script(&self, input: &str) -> Result<Script, Error> {
         let mut statements =  Vec::<Statement>::new();
 
-        for line in input.trim().split('\n') {
+        for line in input.trim().lines() {
             let res = AsmParser::parse(Rule::statement, line);
             match res {
                 Ok(mut statement) => {
@@ -253,6 +267,65 @@ mod tests {
     }
 
     #[test]
+    fn parse_expression() {
+        let parser = AsmParser::new();
+        assert_eq!(parser.parse_expression("ap inc 1"),
+                   Ok(Ops(vec![
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::Inc)),
+                          Op::Const(Const::EncodedNumber(EncodedNumber {
+                              number: Number::Positive(PositiveNumber {
+                                  value: 1,
+                              }),
+                              modulation: Modulation::Demodulated,
+                           }))
+                           ])));
+
+        assert_eq!(parser.parse_expression("ap ap add ap ap add 2 3 4"), Ok(Ops(vec![
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Sum)),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Sum)),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 2,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 3,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 4,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    })),
+                ])));
+    }
+
+
+    #[test]
+    fn regression_nospace() {
+        let parser = AsmParser::new();
+        assert!(parser.parse_script("cc = ss").is_err());
+    }
+
+    #[test]
+    fn galaxy_smoke_test() {
+        let parser = AsmParser::new();
+        let galaxy = include_str!("../../problems/galaxy.txt");
+
+        assert!(parser.parse_script(galaxy).is_ok())
+    }
+
+
+    #[test]
     fn simple_unnamed_functions_lightning() {
         let parser = AsmParser::new();
         assert_eq!(
@@ -269,21 +342,6 @@ mod tests {
                     }),
                 ],
             }));
-    }
-
-
-    #[test]
-    fn regression_nospace() {
-        let parser = AsmParser::new();
-        assert!(parser.parse_script("cc = ss").is_err());
-    }
-
-    #[test]
-    fn galaxy_smoke_test() {
-        let parser = AsmParser::new();
-        let galaxy = include_str!("../../problems/galaxy.txt");
-
-        assert!(parser.parse_script(galaxy).is_ok())
     }
 
     // #[test]

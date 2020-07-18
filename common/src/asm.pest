@@ -91,6 +91,8 @@ script = {
   ~ &EOI
 }
 
+expr = { expr_part ~ (separator+ ~ expr_part)* }
+
 // TODO: modulated literals support
 // modulated_number_literal = _{ modulated_positive_number_literal | modulated_negative_number_literal }
 //   modulated_positive_number_literal = { "[" ~ ASCII_DIGIT+ ~ "]"}

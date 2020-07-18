@@ -126,8 +126,10 @@ impl Interpreter {
 
             loop {
                 match (states.pop(), eval_op) {
-                    (None, eval_op) =>
-                        return Ok(eval_op.render()),
+                    (None, eval_op) => {
+                        println!(" // rendering {:?}", eval_op);
+                        return Ok(eval_op.render());
+                    },
 
                     (Some(State::EvalAppFun { arg, }), EvalOp::Num { number, }) =>
                         return Err(Error::AppOnNumber { number, arg, }),
@@ -161,6 +163,12 @@ impl Interpreter {
 
                     // false1 on a something: ap ap t x0 x1 = x1
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { .. }))) => {
+                        ast_node = arg;
+                        break;
+                    },
+
+                    // I on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0))) => {
                         ast_node = arg;
                         break;
                     },
@@ -815,27 +823,34 @@ impl Interpreter {
                             .into_iter();
                         let ast_node = match fun_ops_iter.next() {
                             None =>
-                                unreachable!(),
-                            Some(op_a) =>
+                                panic!("render failure: expected op, but got none"),
+                            Some(Op::App) =>
                                 match fun_ops_iter.next() {
                                     None =>
-                                        AstNode::App {
-                                            fun: Box::new(AstNode::Literal { value: op_a, }),
-                                            arg: Box::new(arg_ast_node),
-                                        },
-                                    Some(op_b) =>
+                                        panic!("render failure: expected op fun, but got none"),
+                                    Some(op_a) =>
                                         match fun_ops_iter.next() {
                                             None =>
-                                                AstNode::App {
-                                                    fun: Box::new(AstNode::App {
-                                                        fun: Box::new(AstNode::Literal { value: op_a, }),
-                                                        arg: Box::new(AstNode::Literal { value: op_b, }),
-                                                    }),
-                                                    arg: Box::new(arg_ast_node),
+                                                panic!("render failure: expected op {:?} arg, but got none", op_a),
+                                            Some(op_b) =>
+                                                match fun_ops_iter.next() {
+                                                    None =>
+                                                        AstNode::App {
+                                                            fun: Box::new(AstNode::App {
+                                                                fun: Box::new(AstNode::Literal { value: op_a, }),
+                                                                arg: Box::new(AstNode::Literal { value: op_b, }),
+                                                            }),
+                                                            arg: Box::new(arg_ast_node),
+                                                        },
+                                                    Some(..) =>
+                                                        unreachable!(),
                                                 },
-                                            Some(..) =>
-                                                unreachable!(),
                                         },
+                                },
+                            Some(op_a) =>
+                                AstNode::App {
+                                    fun: Box::new(AstNode::Literal { value: op_a, }),
+                                    arg: Box::new(arg_ast_node),
                                 },
                         };
                         eval_op = EvalOp::Abs(ast_node);
@@ -887,6 +902,7 @@ pub enum EvalFunAbs {
     True1 { captured: AstNode, },
     False0,
     False1 { captured: AstNode, },
+    I0,
 }
 
 impl EvalOp {
@@ -929,7 +945,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Pwr2)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::I)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0)),
             Op::Const(Const::Fun(Fun::Cons)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Car)) =>
@@ -981,6 +997,7 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Sum))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Sum1 { captured, })) =>
                 Ops(vec![
+                    Op::App,
                     Op::Const(Const::Fun(Fun::Sum)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
@@ -988,6 +1005,7 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Mul))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mul1 { captured, })) =>
                 Ops(vec![
+                    Op::App,
                     Op::Const(Const::Fun(Fun::Mul)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
@@ -995,6 +1013,7 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Div))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Div1 { captured, })) =>
                 Ops(vec![
+                    Op::App,
                     Op::Const(Const::Fun(Fun::Div)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
@@ -1002,6 +1021,7 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Eq))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq1 { captured, })) =>
                 Ops(vec![
+                    Op::App,
                     Op::Const(Const::Fun(Fun::Eq)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
@@ -1009,6 +1029,7 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Lt))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt1 { captured, })) =>
                 Ops(vec![
+                    Op::App,
                     Op::Const(Const::Fun(Fun::Lt)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
@@ -1019,17 +1040,25 @@ impl EvalOp {
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::True))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, })) => {
-                let mut ops = vec![Op::Const(Const::Fun(Fun::True))];
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::True)),
+                ];
                 ops.extend(captured.render().0);
                 Ops(ops)
             },
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::False))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { captured, })) => {
-                let mut ops = vec![Op::Const(Const::Fun(Fun::False))];
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::False)),
+                ];
                 ops.extend(captured.render().0);
                 Ops(ops)
             },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::I))]),
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),
         }

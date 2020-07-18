@@ -32,6 +32,7 @@ mod op_false;
 mod eq;
 mod lt;
 mod neg;
+mod op_i;
 
 #[test]
 fn ast_tree_basic() {

@@ -1,4 +1,5 @@
-WHITESPACE = _{ " " | "\t" }
+separator = _{ " " | "\t" }
+// WHITESPACE = _{ " " | "\t" }
 
 grid_number_literal = _{ grid_positive_number_literal | grid_negative_number_literal }
   grid_positive_number_literal = @{ ASCII_DIGIT+ }
@@ -59,16 +60,28 @@ named_func = {
   f38_ = { "f38" } // TODO: better name?
   statelessdraw_ = { "statelessdraw" }
 
-  // Corresponds to unknown (yet?) function with the number
-  unnamed_func = { ":" ~ ASCII_DIGIT+ }
+// Corresponds to unknown (yet?) function with the number
+unnamed_func = { ":" ~ ASCII_DIGIT+ }
 
-equal_sign = { "=" }
-
-expr = _{ grid_number_literal | variable | func | list_construction }
+equal_sign = {
+  ( separator ~ "=" )
+  | ("=" ~ separator)
+  | (separator ~ "=" ~ separator)
+}
 
 list_construction = {
-    "(" ~ ")"
+    "(" ~ separator* ~ ")"
   | "(" ~ expr ~ ("," ~ expr )* ~ ")"
+}
+
+expr_part = _{
+    ( grid_number_literal | variable | func | list_construction ) ~ separator+
+  | ( grid_number_literal | variable | func | list_construction ) ~ NEWLINE
+}
+
+expr = _{ expr_part
+  | (expr_part ~ (separator+ ~ expr_part)+ )
+  | (expr_part ~ ( separator+ ~ expr_part)+ ~ NEWLINE)
 }
 
 statement = _{ expr+ ~ equal_sign ~ expr+ }

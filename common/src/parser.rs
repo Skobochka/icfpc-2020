@@ -53,12 +53,16 @@ impl AsmParser {
     }
 
     pub fn parse_func(&self, func: Pair<Rule>) -> Fun {
-        // match number.as_rule() {
-        //     _ => {
-                println!("{:?}", func.as_rule());
+        println!("{:?}", func.as_rule());
+
+        match func.as_rule() {
+            Rule::dec_ => Fun::Dec,
+            Rule::inc_ => Fun::Inc,
+            Rule::add_ => Fun::Sum,
+            _ => {
                 unreachable!()
-        //     }
-        // }
+            }
+        }
     }
 
     pub fn parse_expr(&self, expr: Pair<Rule>) -> Op {
@@ -114,7 +118,8 @@ mod tests {
     fn debug_test() {
         let parser = AsmParser::new();
         assert_eq!(
-            parser.parse_script("dec = inc\nadd x0 = ap dec 1"),
+            parser.parse_script("dec = inc\nadd 1 = ap dec 1\nvec  = cons x0"),
+            // parser.parse_script("cc = ss"),
             Ok(Script {
                 statements: vec![]
             }));

@@ -60,7 +60,8 @@ named_func = {
   statelessdraw_ = { "statelessdraw" }
 
 // Corresponds to unknown (yet?) function with the number
-unnamed_func = ${ ":" ~ ASCII_DIGIT+ }
+func_name = { ASCII_DIGIT+ }
+unnamed_func = ${ ":" ~ func_name }
 
 equal_sign = @{ "=" }
 
@@ -71,7 +72,7 @@ list_construction = {
   | "(" ~ expr_part ~ ("," ~ expr_part )* ~ ")"
 }
 
-statement = _{
+statement = {
     expr_part
   ~ (separator+ ~ expr_part)*
   ~ separator*
@@ -79,8 +80,7 @@ statement = _{
   ~ separator*
   ~ expr_part
   ~ (separator+ ~ expr_part)*
-  ~ NEWLINE? }
-
+}
 
 script = {
     SOI

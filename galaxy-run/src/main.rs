@@ -26,7 +26,12 @@ fn main() -> Result<(),Error> {
     let oops = inter.lookup_env(
         &env,
         Ops(vec![
-            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1338, }), }),
+            // this is "galaxy"
+            Op::Variable(Variable {
+                name: Number::Negative(NegativeNumber {
+                    value: -1,
+                }),
+            }),
         ]),
     );
     println!("{:?}",oops);

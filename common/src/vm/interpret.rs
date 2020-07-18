@@ -7,6 +7,7 @@ use super::{
         Fun,
         Const,
         Number,
+        Variable,
         Modulation,
         EncodedNumber,
         PositiveNumber,
@@ -101,6 +102,14 @@ impl Interpreter {
             let mut maybe_node: Option<AstNode> = match ops.pop() {
                 None =>
                     None,
+                Some(Op::Const(Const::Fun(Fun::Galaxy))) =>
+                    Some(AstNode::Literal {
+                        value: Op::Variable(Variable {
+                            name: Number::Negative(NegativeNumber {
+                                value: -1,
+                            }),
+                        }),
+                    }),
                 Some(value @ Op::Const(..)) |
                 Some(value @ Op::Variable(..)) =>
                     Some(AstNode::Literal { value: value, }),
@@ -1246,7 +1255,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Modem)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
-                unimplemented!(),
+                unreachable!(), // should be renamed to variable with name "-1"
             Op::Variable(var) =>
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
             Op::App =>

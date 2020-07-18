@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::{
     super::code::{
         Op,
@@ -13,7 +15,6 @@ use super::{
         Script,
         Statement,
     },
-    Env,
 };
 
 #[cfg(test)]
@@ -47,6 +48,40 @@ pub enum AstNode {
     App { fun: Box<AstNode>, arg: Box<AstNode>, },
 }
 
+// TODO: rewrite rules
+
+#[derive(Debug)]
+pub struct Env {
+    forward: HashMap<AstNode, AstNode>,
+    backward: HashMap<AstNode, AstNode>,
+}
+
+impl Env {
+    pub fn new() -> Env {
+        Env {
+            forward: HashMap::new(),
+            backward: HashMap::new(),
+        }
+    }
+
+    pub fn add_equality(&mut self, left: Ast, right: Ast) {
+        if let (Ast::Tree(left), Ast::Tree(right)) = (left, right) {
+            self.forward.insert(left.clone(), right.clone());
+            self.backward.insert(right, left);
+        }
+    }
+
+    pub fn lookup_ast(&self, key: &AstNode) -> Option<&AstNode> {
+        match self.forward.get(key) {
+            Some(o) => Some(o),
+            None => match self.backward.get(key) {
+                Some(o) => Some(o),
+                None => None,
+            }
+        }
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
@@ -54,11 +89,7 @@ impl Interpreter {
         }
     }
 
-    pub fn build_tree(&self, ops: Ops) -> Result<Ast, Error> {
-        self.build_tree_subst(ops, &Env::new())
-    }
-
-    pub fn build_tree_subst(&self, Ops(mut ops): Ops, env: &Env) -> Result<Ast, Error> {
+    pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,
             AwaitAppArg { fun: AstNode, },
@@ -70,17 +101,9 @@ impl Interpreter {
             let mut maybe_node: Option<AstNode> = match ops.pop() {
                 None =>
                     None,
-                Some(value @ Op::Const(..)) =>
-                    Some(AstNode::Literal { value: value, }),
+                Some(value @ Op::Const(..)) |
                 Some(value @ Op::Variable(..)) =>
-                    match env.lookup(Ops(vec![value.clone()])) {
-                        Some(subst_ops) => {
-                            ops.extend(subst_ops.0.into_iter().rev());
-                            continue;
-                        },
-                        None =>
-                            Some(AstNode::Literal { value: value, }),
-                    },
+                    Some(AstNode::Literal { value: value, }),
                 Some(Op::App) => {
                     states.push(State::AwaitAppFun);
                     continue;
@@ -126,31 +149,41 @@ impl Interpreter {
     }
 
     fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
-        println!(" // eval_equality( {:?} ), env = {:?}", eq, env);
-
         let Equality { left, right } = eq;
 
-        let left = self.build_tree_subst(left, env)?;
-        let left = self.eval(left, env)?;
+        let left_ast = self.build_tree(left)?;
+        let left = self.eval(left_ast, env)?;
 
-        let right = self.build_tree_subst(right, env)?;
-        let right = self.eval(right, env)?;
+        let right_ast = self.build_tree(right)?;
+        let right = self.eval(right_ast, env)?;
 
-        env.add_equality(Equality { left, right });
+        env.add_equality(
+            self.build_tree(left)?,
+            self.build_tree(right)?,
+        );
 
         Ok(())
     }
 
-    pub fn eval(&self, ast: Ast, _env: &mut Env) -> Result<Ops, Error> {
+    pub fn lookup_env(&self, env: &Env, key: Ops) -> Result<Option<Ops>, Error> {
+        if let Ast::Tree(ast_node) = self.build_tree(key)? {
+            if let Some(ast_node) = env.lookup_ast(&ast_node) {
+                return Ok(Some(ast_node.clone().render()))
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn eval(&self, ast: Ast, env: &Env) -> Result<Ops, Error> {
         match ast {
             Ast::Empty =>
                 Err(Error::EvalEmptyTree),
             Ast::Tree(node) =>
-                self.eval_tree(node),
+                self.eval_tree(node, env),
         }
     }
 
-    fn eval_tree(&self, mut ast_node: AstNode) -> Result<Ops, Error> {
+    fn eval_tree(&self, mut ast_node: AstNode, env: &Env) -> Result<Ops, Error> {
         enum State {
             EvalAppFun { arg: AstNode, },
             EvalAppArgNum { fun: EvalFunNum, },

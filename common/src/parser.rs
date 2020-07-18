@@ -95,7 +95,6 @@ impl AsmParser {
     }
 
     pub fn parse_expr(&self, expr: Pair<Rule>) -> Op {
-        println!("Expr: {:?}", expr.as_str());
         match expr.as_rule() {
             Rule::named_func => {
                 let mut inner_rules = expr.into_inner();
@@ -123,7 +122,6 @@ impl AsmParser {
 
     pub fn parse_statement(&self, statement: Pair<Rule>) -> Statement {
 
-        println!("Statement: {:?}", statement.as_str());
         let mut part_iter = statement.into_inner();
 
         let mut in_left = true;
@@ -272,8 +270,8 @@ mod tests {
                 ],
             }));
     }
-    
-    
+
+
     #[test]
     fn regression_nospace() {
         let parser = AsmParser::new();

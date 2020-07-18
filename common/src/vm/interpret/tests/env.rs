@@ -51,7 +51,7 @@ fn simple() {
 
     let interpreter = Interpreter::new();
     let env = interpreter.eval_script(script).unwrap();
-    let x0_value = env.lookup(x0);
+    let x0_value = interpreter.lookup_env(&env, x0).unwrap();
     assert_eq!(x0_value, Some(one));
 }
 
@@ -115,7 +115,7 @@ fn galaxy_head() {
 
     let interpreter = Interpreter::new();
     let env = interpreter.eval_script(script).unwrap();
-    let x1029_value_1 = env.lookup(x1029_lhs.clone());
+    let x1029_value_1 = interpreter.lookup_env(&env, x1029_lhs.clone()).unwrap();
 
     // :1029 = ap ap cons 7 ap ap cons 123229502148636 nil
     let x1029_rhs = Ops(vec![
@@ -142,7 +142,7 @@ fn galaxy_head() {
 
     let interpreter = Interpreter::new();
     let env = interpreter.eval_script(script).unwrap();
-    let x1029_value_2 = env.lookup(x1029_lhs.clone());
+    let x1029_value_2 = interpreter.lookup_env(&env, x1029_lhs.clone()).unwrap();
 
     assert_eq!(x1029_value_1, x1029_value_2);
 }

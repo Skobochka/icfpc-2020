@@ -126,8 +126,6 @@ impl Interpreter {
     }
 
     fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
-        println!(" // eval_equality( {:?} ), env = {:?}", eq, env);
-
         let Equality { left, right } = eq;
 
         let left = self.build_tree_subst(left, env)?;

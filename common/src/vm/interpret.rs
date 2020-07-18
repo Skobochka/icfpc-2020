@@ -67,19 +67,33 @@ impl Env {
 
     pub fn add_equality(&mut self, left: Ast, right: Ast) {
         if let (Ast::Tree(left), Ast::Tree(right)) = (left, right) {
-            self.forward.insert(left.clone(), right.clone());
-            self.backward.insert(right, left);
+            if let AstNode::Literal { value: Op::Variable(..), } = left {
+                self.forward.insert(left.clone(), right.clone());
+            }
+            if let AstNode::Literal { value: Op::Variable(..), } = right {
+                self.backward.insert(right, left);
+            }
         }
     }
 
     pub fn lookup_ast(&self, key: &AstNode) -> Option<&AstNode> {
         match self.forward.get(key) {
-            Some(o) => Some(o),
+            Some(o) => {
+                Some(o)
+            },
             None => match self.backward.get(key) {
-                Some(o) => Some(o),
-                None => None,
+                Some(o) => {
+                    Some(o)
+                },
+                None =>
+                    None,
             }
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.forward.clear();
+        self.backward.clear();
     }
 }
 
@@ -147,17 +161,14 @@ impl Interpreter {
     pub fn eval_script(&self, script: Script) -> Result<Env, Error> {
         let mut env = Env::new();
 
-        for stmt in script.statements {
-            match stmt {
-                Statement::Equality(eq) =>
-                    self.eval_equality(eq, &mut env)?,
-            }
+        for Statement::Equality(eq) in script.statements {
+            let _next_eq = self.eval_equality(eq, &mut env)?;
         }
 
         Ok(env)
     }
 
-    fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
+    fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<Equality, Error> {
         let Equality { left, right } = eq;
 
         let left_ast = self.build_tree(left)?;
@@ -167,11 +178,11 @@ impl Interpreter {
         let right = self.eval(right_ast, env)?;
 
         env.add_equality(
-            self.build_tree(left)?,
-            self.build_tree(right)?,
+            self.build_tree(left.clone())?,
+            self.build_tree(right.clone())?,
         );
 
-        Ok(())
+        Ok(Equality { left, right, })
     }
 
     pub fn lookup_env(&self, env: &Env, key: Ops) -> Result<Option<Ops>, Error> {
@@ -214,6 +225,16 @@ impl Interpreter {
 
             loop {
                 match (states.pop(), eval_op) {
+                    (None, EvalOp::Abs(top_ast_node)) =>
+                        match env.lookup_ast(&top_ast_node) {
+                            Some(subst_ast_node) => {
+                                ast_node = subst_ast_node.clone();
+                                break;
+                            },
+                            None =>
+                                return Ok(EvalOp::Abs(top_ast_node).render()),
+                        },
+
                     (None, eval_op) =>
                         return Ok(eval_op.render()),
 

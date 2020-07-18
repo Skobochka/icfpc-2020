@@ -370,9 +370,12 @@ impl Interpreter {
 
                     // fun on abs
                     (Some(State::EvalAppArg { fun }), EvalOp::Abs(abs)) => {
-                        let mut ops = EvalOp::Fun(fun).render();
-                        ops.0.extend(abs.0);
-                        eval_op = EvalOp::Abs(ops);
+                        let fun_ops = EvalOp::Fun(fun).render();
+                        let mut ops = Vec::with_capacity(1 + fun_ops.0.len() + abs.0.len());
+                        ops.push(Op::App);
+                        ops.extend(fun_ops.0);
+                        ops.extend(abs.0);
+                        eval_op = EvalOp::Abs(Ops(ops));
                     },
 
                     // fun arg invoke
@@ -490,8 +493,8 @@ impl EvalOp {
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unimplemented!(),
-            Op::Variable(..) =>
-                unimplemented!(),
+            Op::Variable(var) =>
+                EvalOp::Abs(Ops(vec![Op::Variable(var)])),
             Op::App =>
                 unreachable!(),
         }

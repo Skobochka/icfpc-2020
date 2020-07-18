@@ -330,28 +330,6 @@ impl Interpreter {
                         break;
                     },
 
-                    // unresolved fun on something
-                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) => {
-                        let fun = self.eval_tree(fun_ast_node.clone(), env)?;
-                        match env.lookup(fun.clone()) {
-                            Some(ops) => {
-                                println!("{:?}", ops);
-                                let op = ops.0[0].clone();
-                                let fun = AstNode::Literal { value: op, };
-                                eval_op = EvalOp::Abs(AstNode::App {
-                                    fun: Box::new(fun),
-                                    arg: Box::new(arg_ast_node),
-                                });
-                            }
-                            None => {
-                                eval_op = EvalOp::Abs(AstNode::App {
-                                    fun: Box::new(fun_ast_node),
-                                    arg: Box::new(arg_ast_node),
-                                });
-                            }
-                        }
-                    },
-
                     // IsNil on a number
                     (Some(State::EvalAppArgIsNil), EvalOp::Num { number, }) =>
                         return Err(Error::IsNilAppOnANumber { number, }),
@@ -374,6 +352,26 @@ impl Interpreter {
                             fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
                             arg: Box::new(arg_ast_node),
                         }),
+
+                    // unresolved fun on something
+                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) => {
+                        let fun = self.eval_tree(fun_ast_node.clone(), env)?;
+                        match env.lookup(fun.clone()) {
+                            Some(ops) => {
+                                println!("{:?}", ops);
+                                println!("{:?}", arg_ast_node);
+                                let op = ops.0[0].clone();
+                                eval_op = EvalOp::new(op);
+                                states.push(State::EvalAppFun { arg: arg_ast_node });
+                            }
+                            None => {
+                                eval_op = EvalOp::Abs(AstNode::App {
+                                    fun: Box::new(fun_ast_node),
+                                    arg: Box::new(arg_ast_node),
+                                });
+                            }
+                        }
+                    },
 
                     // inc on positive number
                     (

@@ -138,7 +138,7 @@ impl Interpreter {
                         break;
                     },
 
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgFun(fun))) =>
+                    (Some(State::EvalAppFun { arg: _, }), EvalOp::Fun(EvalFun::ArgFun(..))) =>
                         unimplemented!(),
 
                     // true0 on a something
@@ -150,6 +150,18 @@ impl Interpreter {
                     // true1 on a something: ap ap t x0 x1 = x0
                     (Some(State::EvalAppFun { .. }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, }))) => {
                         ast_node = captured;
+                        break;
+                    },
+
+                    // false0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 {
+                            captured: arg,
+                        })),
+
+                    // false1 on a something: ap ap t x0 x1 = x1
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { .. }))) => {
+                        ast_node = arg;
                         break;
                     },
 
@@ -742,6 +754,8 @@ pub enum EvalFunFun {
 pub enum EvalFunAbs {
     True0,
     True1 { captured: AstNode, },
+    False0,
+    False1 { captured: AstNode, },
 }
 
 impl EvalOp {
@@ -780,7 +794,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::True)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
             Op::Const(Const::Fun(Fun::False)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)),
             Op::Const(Const::Fun(Fun::Pwr2)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::I)) =>

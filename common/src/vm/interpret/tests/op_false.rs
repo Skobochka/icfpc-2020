@@ -16,14 +16,14 @@ use super::{
 fn eval() {
     let interpreter = Interpreter::new();
 
-    // ap ap t x0 x1   =   x0
+    // ap ap f x0 x1   =   x1
     assert_eq!(
         interpreter.eval(
             interpreter.build_tree(
                 Ops(vec![
                     Op::App,
                     Op::App,
-                    Op::Const(Const::Fun(Fun::True)),
+                    Op::Const(Const::Fun(Fun::False)),
                     Op::Variable(Variable {
                         name: Number::Positive(PositiveNumber {
                             value: 0,
@@ -41,13 +41,13 @@ fn eval() {
         Ok(Ops(vec![
             Op::Variable(Variable {
                 name: Number::Positive(PositiveNumber {
-                    value: 0,
+                    value: 1,
                 }),
             }),
         ])),
     );
 
-    // ap ap ap t inc x1 1   =   2
+    // ap ap ap f inc dec 1   =   0
     assert_eq!(
         interpreter.eval(
             interpreter.build_tree(
@@ -55,13 +55,9 @@ fn eval() {
                     Op::App,
                     Op::App,
                     Op::App,
-                    Op::Const(Const::Fun(Fun::True)),
+                    Op::Const(Const::Fun(Fun::False)),
                     Op::Const(Const::Fun(Fun::Inc)),
-                    Op::Variable(Variable {
-                        name: Number::Positive(PositiveNumber {
-                            value: 1,
-                        }),
-                    }),
+                    Op::Const(Const::Fun(Fun::Dec)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
@@ -75,7 +71,7 @@ fn eval() {
         Ok(Ops(vec![
             Op::Const(Const::EncodedNumber(EncodedNumber {
                 number: Number::Positive(PositiveNumber {
-                    value: 2,
+                    value: 0,
                 }),
                 modulation: Modulation::Demodulated,
             })),

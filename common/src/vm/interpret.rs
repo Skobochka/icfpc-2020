@@ -140,9 +140,6 @@ impl Interpreter {
                         break;
                     },
 
-                    (Some(State::EvalAppFun { arg: _, }), EvalOp::Fun(EvalFun::ArgFun(..))) =>
-                        unimplemented!(),
-
                     // true0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 {
@@ -167,12 +164,37 @@ impl Interpreter {
                         break;
                     },
 
-                    // I on a something
+                    // I0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0))) => {
                         ast_node = arg;
                         break;
                     },
 
+                    // C0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 {
+                            x: arg,
+                        })),
+
+                    // C1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 { x, }))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 {
+                            x, y: arg,
+                        })),
+
+                    // C2 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, }))) => {
+                        ast_node = AstNode::App {
+                            fun: Box::new(AstNode::App {
+                                fun: Box::new(x),
+                                arg: Box::new(arg),
+                            }),
+                            arg: Box::new(y),
+                        };
+                        break;
+                    },
+
+                    // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         eval_op = EvalOp::Abs(AstNode::App {
                             fun: Box::new(fun_ast_node),
@@ -871,7 +893,6 @@ enum EvalOp {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EvalFun {
     ArgNum(EvalFunNum),
-    ArgFun(EvalFunFun),
     ArgAbs(EvalFunAbs),
 }
 
@@ -903,6 +924,9 @@ pub enum EvalFunAbs {
     False0,
     False1 { captured: AstNode, },
     I0,
+    C0,
+    C1 { x: AstNode, },
+    C2 { x: AstNode, y: AstNode, },
 }
 
 impl EvalOp {
@@ -935,7 +959,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::S)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::C)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C0)),
             Op::Const(Const::Fun(Fun::B)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::True)) =>
@@ -1035,8 +1059,6 @@ impl EvalOp {
                 ]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Neg0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Neg))]),
-            EvalOp::Fun(EvalFun::ArgFun(..)) =>
-                unimplemented!(),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::True))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, })) => {
@@ -1059,6 +1081,25 @@ impl EvalOp {
             },
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::I))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::C))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 { x, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::C)),
+                ];
+                ops.extend(x.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::C)),
+                ];
+                ops.extend(x.render().0);
+                ops.extend(y.render().0);
+                Ops(ops)
+            },
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),
         }

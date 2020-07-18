@@ -23,18 +23,26 @@ fn main() -> Result<(),Error> {
     let script = AsmParser.parse_script(&buffer).map_err(Error::Parse)?;
     let inter = Interpreter{};
     let env = inter.eval_script(script).map_err(Error::Vm)?;
-    let oops = inter.lookup_env(
-        &env,
-        Ops(vec![
+    let oops = inter.eval(
+        inter.build_tree(Ops(vec![
+            Op::App,
             // this is "galaxy"
             Op::Variable(Variable {
                 name: Number::Negative(NegativeNumber {
                     value: -1,
                 }),
             }),
-        ]),
-    );
-    println!("{:?}",oops);
+            Op::Const(Const::EncodedNumber(EncodedNumber {
+                number: Number::Positive(PositiveNumber {
+                    value: 0,
+                }),
+                modulation: Modulation::Demodulated,
+            })),
+        ])).map_err(Error::Vm)?,
+        &env,
+    ).map_err(Error::Vm)?;
+
+    println!("{:#?}",oops);
     //Const(Fun(Galaxy))
 
     Ok(())

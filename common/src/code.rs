@@ -30,6 +30,18 @@ pub enum Syntax {
 pub enum Const {
     EncodedNumber(EncodedNumber),
     Fun(Fun), // predefined functions from spec
+    Picture(Picture), // an image drawing script
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Picture {
+    pub points: Vec<Coord>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Coord {
+    pub x: EncodedNumber,
+    pub y: EncodedNumber,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

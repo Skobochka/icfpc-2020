@@ -25,6 +25,7 @@ use super::{
 mod inc;
 mod dec;
 mod sum;
+mod mul;
 
 #[test]
 fn ast_tree_basic() {

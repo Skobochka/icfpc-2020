@@ -54,21 +54,33 @@ impl Interpreter {
         }
     }
 
-    pub fn build_tree(&self, Ops(ops): Ops) -> Result<Ast, Error> {
+    pub fn build_tree(&self, ops: Ops) -> Result<Ast, Error> {
+        self.build_tree_subst(ops, &Env::new())
+    }
+
+    pub fn build_tree_subst(&self, Ops(mut ops): Ops, env: &Env) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,
             AwaitAppArg { fun: AstNode, },
         }
 
         let mut states = vec![];
-        let mut ops_iter = ops.into_iter();
+        ops.reverse();
         loop {
-            let mut maybe_node: Option<AstNode> = match ops_iter.next() {
+            let mut maybe_node: Option<AstNode> = match ops.pop() {
                 None =>
                     None,
-                Some(value @ Op::Const(..)) |
-                Some(value @ Op::Variable(..)) =>
+                Some(value @ Op::Const(..)) =>
                     Some(AstNode::Literal { value: value, }),
+                Some(value @ Op::Variable(..)) =>
+                    match env.lookup(Ops(vec![value.clone()])) {
+                        Some(subst_ops) => {
+                            ops.extend(subst_ops.0.into_iter().rev());
+                            continue;
+                        },
+                        None =>
+                            Some(AstNode::Literal { value: value, }),
+                    },
                 Some(Op::App) => {
                     states.push(State::AwaitAppFun);
                     continue;
@@ -100,7 +112,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_script(&self, script: Script) -> Result<Env, Error> {
+    pub fn eval_script(&self, script: Script) -> Result<Env, Error> {
         let mut env = Env::new();
 
         for stmt in script.statements {
@@ -114,12 +126,14 @@ impl Interpreter {
     }
 
     fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
+        println!(" // eval_equality( {:?} ), env = {:?}", eq, env);
+
         let Equality { left, right } = eq;
 
-        let left = self.build_tree(left)?;
+        let left = self.build_tree_subst(left, env)?;
         let left = self.eval(left, env)?;
 
-        let right = self.build_tree(right)?;
+        let right = self.build_tree_subst(right, env)?;
         let right = self.eval(right, env)?;
 
         env.add_equality(Equality { left, right });
@@ -127,16 +141,16 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn eval(&self, ast: Ast, env: &mut Env) -> Result<Ops, Error> {
+    pub fn eval(&self, ast: Ast, _env: &mut Env) -> Result<Ops, Error> {
         match ast {
             Ast::Empty =>
                 Err(Error::EvalEmptyTree),
             Ast::Tree(node) =>
-                self.eval_tree(node, env),
+                self.eval_tree(node),
         }
     }
 
-    fn eval_tree(&self, mut ast_node: AstNode, env: &mut Env) -> Result<Ops, Error> {
+    fn eval_tree(&self, mut ast_node: AstNode) -> Result<Ops, Error> {
         enum State {
             EvalAppFun { arg: AstNode, },
             EvalAppArgNum { fun: EvalFunNum, },
@@ -354,24 +368,11 @@ impl Interpreter {
                         }),
 
                     // unresolved fun on something
-                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) => {
-                        let fun = self.eval_tree(fun_ast_node.clone(), env)?;
-                        match env.lookup(fun.clone()) {
-                            Some(ops) => {
-                                println!("{:?}", ops);
-                                println!("{:?}", arg_ast_node);
-                                let op = ops.0[0].clone();
-                                eval_op = EvalOp::new(op);
-                                states.push(State::EvalAppFun { arg: arg_ast_node });
-                            }
-                            None => {
-                                eval_op = EvalOp::Abs(AstNode::App {
-                                    fun: Box::new(fun_ast_node),
-                                    arg: Box::new(arg_ast_node),
-                                });
-                            }
-                        }
-                    },
+                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
+                        eval_op = EvalOp::Abs(AstNode::App {
+                            fun: Box::new(fun_ast_node),
+                            arg: Box::new(arg_ast_node),
+                        }),
 
                     // inc on positive number
                     (

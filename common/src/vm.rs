@@ -9,6 +9,7 @@ use crate::code::{
 
 // TODO: rewrite rules
 
+#[derive(Debug)]
 pub struct Env {
     forward: HashMap<Ops, Ops>,
     backward: HashMap<Ops, Ops>,

@@ -15,7 +15,6 @@ use crate::code::{
 use crate::vm::{
     interpret::{
         Interpreter,
-        Env,
     },
 };
 
@@ -117,7 +116,7 @@ fn galaxy_head() {
     let interpreter = Interpreter::new();
     let env = interpreter.eval_script(script).unwrap();
     let x1029_value_1 = env.lookup(x1029_lhs.clone());
- 
+
     // :1029 = ap ap cons 7 ap ap cons 123229502148636 nil
     let x1029_rhs = Ops(vec![
         Op::App,

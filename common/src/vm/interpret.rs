@@ -9,6 +9,9 @@ use super::{
         EncodedNumber,
         PositiveNumber,
         NegativeNumber,
+        Equality,
+        Script,
+        Statement,
     },
     Env,
 };
@@ -95,6 +98,33 @@ impl Interpreter {
                 }
             }
         }
+    }
+
+    fn eval_script(&self, script: Script) -> Result<Env, Error> {
+        let mut env = Env::new();
+
+        for stmt in script.statements {
+            match stmt {
+                Statement::Equality(eq) =>
+                    self.eval_equality(eq, &mut env)?,
+            }
+        }
+
+        Ok(env)
+    }
+
+    fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
+        let Equality { left, right } = eq;
+
+        let left = self.build_tree(left)?;
+        let left = self.eval(left, env)?;
+
+        let right = self.build_tree(right)?;
+        let right = self.eval(right, env)?;
+
+        env.add_equality(Equality { left, right });
+
+        Ok(())
     }
 
     pub fn eval(&self, ast: Ast, env: &mut Env) -> Result<Ops, Error> {
@@ -302,6 +332,7 @@ impl Interpreter {
 
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
+                    // TODO: lookup fn in env
                         eval_op = EvalOp::Abs(AstNode::App {
                             fun: Box::new(fun_ast_node),
                             arg: Box::new(arg_ast_node),

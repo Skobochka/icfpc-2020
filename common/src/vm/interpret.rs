@@ -1391,7 +1391,6 @@ impl EvalOp {
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 { x, })) => {
                 let mut ops = vec![
                     Op::App,
-                    Op::App,
                     Op::Const(Const::Fun(Fun::Cons)),
                 ];
                 ops.extend(x.render().0);

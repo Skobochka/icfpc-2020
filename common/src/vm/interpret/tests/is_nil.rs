@@ -60,4 +60,33 @@ fn eval() {
         ])),
     );
 
+    // ap ap ap b isnil cdr ap ap cons x0 nil   =   t
+    assert_eq!(
+        interpreter.eval(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::App,
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::B)),
+                    Op::Const(Const::Fun(Fun::IsNil)),
+                    Op::Const(Const::Fun(Fun::Cdr)),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Cons)),
+                    Op::Variable(Variable {
+                        name: Number::Positive(PositiveNumber {
+                            value: 0,
+                        }),
+                    }),
+                    Op::Const(Const::Fun(Fun::Nil)),
+                ]),
+            ).unwrap(),
+            &mut Env::new(),
+        ),
+        Ok(Ops(vec![
+            Op::Const(Const::Fun(Fun::True)),
+        ])),
+    );
+
 }

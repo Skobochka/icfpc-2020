@@ -7,6 +7,7 @@ use super::{
         Fun,
         Const,
         Number,
+        Syntax,
         Variable,
         Modulation,
         EncodedNumber,
@@ -37,6 +38,11 @@ pub enum Error {
     IsNilAppOnANumber { number: EncodedNumber, },
     ModOnModulatedNumber { number: EncodedNumber, },
     DemOnDemodulatedNumber { number: EncodedNumber, },
+    ListNotClosed,
+    ListCommaWithoutElement,
+    ListSyntaxUnexpectedNode { node: AstNode, },
+    ListSyntaxSeveralCommas,
+    ListSyntaxClosingAfterComma,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -110,6 +116,10 @@ impl Interpreter {
         enum State {
             AwaitAppFun,
             AwaitAppArg { fun: AstNode, },
+            ListBegin,
+            ListPush { element: AstNode, },
+            ListContinue,
+            ListContinueComma,
         }
 
         let mut states = vec![];
@@ -126,8 +136,13 @@ impl Interpreter {
                             }),
                         }),
                     }),
+                Some(Op::Syntax(Syntax::LeftParen)) => {
+                    states.push(State::ListBegin);
+                    continue;
+                },
                 Some(value @ Op::Const(..)) |
-                Some(value @ Op::Variable(..)) =>
+                Some(value @ Op::Variable(..)) |
+                Some(value @ Op::Syntax(..)) =>
                     Some(AstNode::Literal { value: value, }),
                 Some(Op::App) => {
                     states.push(State::AwaitAppFun);
@@ -155,6 +170,52 @@ impl Interpreter {
                             arg: Box::new(node),
                         });
                     },
+                    (Some(State::ListBegin), None) =>
+                        return Err(Error::ListNotClosed),
+                    (Some(State::ListBegin), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) =>
+                        return Err(Error::ListCommaWithoutElement),
+                    (Some(State::ListBegin), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
+                        maybe_node = Some(AstNode::Literal {
+                            value: Op::Const(Const::Fun(Fun::Nil)),
+                        }),
+                    (Some(State::ListBegin), Some(node)) => {
+                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListContinue);
+                        break;
+                    },
+                    (Some(State::ListContinue), None) =>
+                        return Err(Error::ListNotClosed),
+                    (Some(State::ListContinue), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) => {
+                        states.push(State::ListContinueComma);
+                        break;
+                    },
+                    (Some(State::ListContinue), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
+                        maybe_node = Some(AstNode::Literal {
+                            value: Op::Const(Const::Fun(Fun::Nil)),
+                        }),
+                    (Some(State::ListContinue), Some(node)) =>
+                        return Err(Error::ListSyntaxUnexpectedNode { node, }),
+                    (Some(State::ListContinueComma), None) =>
+                        return Err(Error::ListNotClosed),
+                    (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) =>
+                        return Err(Error::ListSyntaxSeveralCommas),
+                    (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
+                        return Err(Error::ListSyntaxClosingAfterComma),
+                    (Some(State::ListContinueComma), Some(node)) => {
+                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListContinue);
+                        break;
+                    },
+                    (Some(State::ListPush { .. }), None) =>
+                        unreachable!(),
+                    (Some(State::ListPush { element, }), Some(tail)) =>
+                        maybe_node = Some(AstNode::App {
+                            fun: Box::new(AstNode::App {
+                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                                arg: Box::new(element),
+                            }),
+                            arg: Box::new(tail),
+                        }),
                 }
             }
         }
@@ -1347,12 +1408,6 @@ impl EvalOp {
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0)),
             Op::Const(Const::Fun(Fun::IsNil)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)),
-            Op::Const(Const::Fun(Fun::LeftParen)) =>
-                unimplemented!(),
-            Op::Const(Const::Fun(Fun::Comma)) =>
-                unimplemented!(),
-            Op::Const(Const::Fun(Fun::RightParen)) =>
-                unimplemented!(),
             Op::Const(Const::Fun(Fun::Vec)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0)),
             Op::Const(Const::Fun(Fun::Draw)) =>
@@ -1372,7 +1427,9 @@ impl EvalOp {
             Op::Variable(var) =>
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
             Op::App =>
-                unreachable!(),
+                unreachable!(), // should be processed by ast builder
+            Op::Syntax(..) =>
+                unreachable!(), // should be processed by ast builder
         }
     }
 

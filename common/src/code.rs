@@ -16,6 +16,14 @@ pub enum Op {
     Const(Const), // constants
     Variable(Variable), // variables
     App, // function application
+    Syntax(Syntax), // various syntax
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Syntax {
+    LeftParen, // left parenthesis (list construction syntax)
+    Comma, // comma (list construction syntax)
+    RightParen, // right parenthesis (list construction syntax)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -77,9 +85,6 @@ pub enum Fun {
     Cdr, // cdr / tail
     Nil, // nil / empty list
     IsNil, // is nil (is empty list)
-    LeftParen, // left parenthesis (list construction syntax)
-    Comma, // comma (list construction syntax)
-    RightParen, // right parenthesis (list construction syntax)
     Vec, // vector (alias for cons)
     Draw, // draw (communication with display)
     Chkb, // checkerboard

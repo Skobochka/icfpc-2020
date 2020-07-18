@@ -13,6 +13,7 @@ use super::{
             Fun,
             Const,
             Number,
+            Syntax,
             Variable,
             Modulation,
             EncodedNumber,
@@ -42,6 +43,7 @@ mod cdr;
 mod nil;
 mod is_nil;
 mod if_zero;
+mod list;
 mod env;
 mod various;
 

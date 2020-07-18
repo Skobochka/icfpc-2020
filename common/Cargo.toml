@@ -1,6 +1,6 @@
 [package]
 name = "common"
-version = "0.1.26"
+version = "0.1.27"
 authors = ["skobochka"]
 edition = "2018"
 

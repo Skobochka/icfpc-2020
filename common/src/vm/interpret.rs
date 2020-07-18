@@ -258,6 +258,12 @@ impl Interpreter {
                         break;
                     },
 
+                    // Nil0 on a something
+                    (Some(State::EvalAppFun { .. }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
+                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), };
+                        break;
+                    },
+
                     // S0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 {
@@ -1029,6 +1035,7 @@ pub enum EvalFunAbs {
     Cons2 { x: AstNode, y: AstNode, },
     Car0,
     Cdr0,
+    Nil0,
 }
 
 impl EvalOp {
@@ -1079,7 +1086,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Cdr)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0)),
             Op::Const(Const::Fun(Fun::Nil)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0)),
             Op::Const(Const::Fun(Fun::IsNil)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::LeftParen)) =>
@@ -1263,6 +1270,8 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Car))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Cdr))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),
         }

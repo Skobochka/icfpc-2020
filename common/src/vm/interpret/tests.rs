@@ -39,6 +39,7 @@ mod op_s;
 mod cons;
 mod car;
 mod cdr;
+mod nil;
 
 #[test]
 fn ast_tree_basic() {

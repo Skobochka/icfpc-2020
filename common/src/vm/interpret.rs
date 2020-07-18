@@ -108,7 +108,7 @@ impl Interpreter {
     fn eval_tree(&self, mut ast_node: AstNode, _env: &mut Env) -> Result<Ops, Error> {
         enum State {
             EvalAppFun { arg: AstNode, },
-            EvalAppArg { fun: EvalFun, },
+            EvalAppArg { fun: EvalFunNum, },
         }
 
         let mut states = vec![];
@@ -131,17 +131,21 @@ impl Interpreter {
 
                     (Some(State::EvalAppFun { arg, }), EvalOp::Num { number, }) =>
                         return Err(Error::AppOnNumber { number, arg, }),
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(fun)) => {
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgNum(fun))) => {
                         states.push(State::EvalAppArg { fun, });
                         ast_node = arg;
                         break;
                     },
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgFun(fun))) =>
+                        unimplemented!(),
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(fun))) =>
+                        unimplemented!(),
                     (Some(State::EvalAppFun { arg: _, }), EvalOp::Abs(..)) =>
                         unimplemented!(),
 
                     // inc on positive number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Inc0, }),
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value, }),
@@ -158,7 +162,7 @@ impl Interpreter {
 
                     // inc on negative number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Inc0, }),
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value, }),
@@ -178,12 +182,12 @@ impl Interpreter {
                         },
 
                     // inc on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Inc0), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Inc0, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // dec on positive number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Dec0, }),
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value, }),
@@ -204,7 +208,7 @@ impl Interpreter {
 
                     // dec on negative number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Dec0, }),
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value, }),
@@ -220,12 +224,12 @@ impl Interpreter {
                         },
 
                     // dec on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Dec0, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // sum0 on a number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Sum0), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Sum0, }),
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Sum1 {
@@ -233,29 +237,29 @@ impl Interpreter {
                         })),
 
                     // sum0 on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Sum0), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Sum0, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // sum1 on two numbers with different modulation
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Sum1 {
+                            fun: EvalFunNum::Sum1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Modulated,
                                     ..
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
                     ) |
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Sum1 {
+                            fun: EvalFunNum::Sum1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Demodulated,
                                     ..
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
                     ) =>
@@ -264,12 +268,12 @@ impl Interpreter {
                     // sum1 on two positive
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Sum1 {
+                            fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -288,12 +292,12 @@ impl Interpreter {
                     // sum1 on positive and negative
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Sum1 {
+                            fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -316,12 +320,12 @@ impl Interpreter {
                     // sum1 on negative and positive
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Sum1 {
+                            fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -344,12 +348,12 @@ impl Interpreter {
                     // sum1 on two negative
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Sum1 {
+                            fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -366,12 +370,12 @@ impl Interpreter {
                         },
 
                     // sum1 on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Sum1 { .. }), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Sum1 { .. }, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // mul0 on a number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Mul0), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Mul0, }),
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mul1 {
@@ -379,29 +383,29 @@ impl Interpreter {
                         })),
 
                     // mul0 on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Mul0), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Mul0, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // mul1 on two numbers with different modulation
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Mul1 {
+                            fun: EvalFunNum::Mul1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Modulated,
                                     ..
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
                     ) |
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Mul1 {
+                            fun: EvalFunNum::Mul1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Demodulated,
                                     ..
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
                     ) =>
@@ -410,12 +414,12 @@ impl Interpreter {
                     // mul1 on two positive
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Mul1 {
+                            fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -434,12 +438,12 @@ impl Interpreter {
                     // mul1 on positive and negative
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Mul1 {
+                            fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -458,12 +462,12 @@ impl Interpreter {
                     // mul1 on negative and positive
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Mul1 {
+                            fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -482,12 +486,12 @@ impl Interpreter {
                     // mul1 on two negative
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Mul1 {
+                            fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -504,12 +508,12 @@ impl Interpreter {
                         },
 
                     // mul1 on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Mul1 { .. }), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Mul1 { .. }, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // div0 on a number
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Div0), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Div0, }),
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Div1 {
@@ -517,12 +521,12 @@ impl Interpreter {
                         })),
 
                     // div0 on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Div0), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Div0, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // div1 on a zero
                     (
-                        Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Div1 { .. }), }),
+                        Some(State::EvalAppArg { fun: EvalFunNum::Div1 { .. }, }),
                         EvalOp::Num { number: EncodedNumber { number: Number::Positive(PositiveNumber { value: 0, }), .. }, },
                     ) =>
                         return Err(Error::DivisionByZero),
@@ -530,23 +534,23 @@ impl Interpreter {
                     // div1 on two numbers with different modulation
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Div1 {
+                            fun: EvalFunNum::Div1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Modulated,
                                     ..
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
                     ) |
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Div1 {
+                            fun: EvalFunNum::Div1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Demodulated,
                                     ..
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
                     ) =>
@@ -555,12 +559,12 @@ impl Interpreter {
                     // div1 on two positive
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Div1 {
+                            fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -579,12 +583,12 @@ impl Interpreter {
                     // div1 on positive and negative
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Div1 {
+                            fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -603,12 +607,12 @@ impl Interpreter {
                     // div1 on negative and positive
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Div1 {
+                            fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -627,12 +631,12 @@ impl Interpreter {
                     // div1 on two negative
                     (
                         Some(State::EvalAppArg {
-                            fun: EvalFun::ArgNum(EvalFunNum::Div1 {
+                            fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
-                            }),
+                            },
                         }),
                         EvalOp::Num {
                             number: EncodedNumber {
@@ -649,12 +653,12 @@ impl Interpreter {
                         },
 
                     // div1 on fun
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgNum(EvalFunNum::Div1 { .. }), }), EvalOp::Fun(fun)) =>
+                    (Some(State::EvalAppArg { fun: EvalFunNum::Div1 { .. }, }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // fun on abs
                     (Some(State::EvalAppArg { fun }), EvalOp::Abs(arg_ast_node)) => {
-                        let mut fun_ops_iter = EvalOp::Fun(fun)
+                        let mut fun_ops_iter = EvalOp::Fun(EvalFun::ArgNum(fun))
                             .render()
                             .0
                             .into_iter();
@@ -685,13 +689,6 @@ impl Interpreter {
                         };
                         eval_op = EvalOp::Abs(ast_node);
                     },
-
-                    // fun arg invoke
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgFun(..), }), _) =>
-                        unimplemented!(),
-                    // abs arg invoke
-                    (Some(State::EvalAppArg { fun: EvalFun::ArgAbs(..), }), _) =>
-                        unimplemented!(),
                 }
             }
         }

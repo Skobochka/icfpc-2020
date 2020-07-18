@@ -1,7 +1,5 @@
 use super::code::{
     EncodedNumber,
-    PositiveNumber,
-    NegativeNumber,
     Modulation,
     Number,
 };
@@ -17,7 +15,7 @@ pub trait Modulable<T=Self> {
 }
 
 impl Modulable for EncodedNumber {
-    fn demodulate_from_string(from: &str) -> Result<EncodedNumber, Error> {
+    fn demodulate_from_string(_from: &str) -> Result<EncodedNumber, Error> {
         unimplemented!("Not implemented yet")
 
         // match &from[0..1] {
@@ -75,6 +73,10 @@ impl Modulable for EncodedNumber {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::code::{
+        PositiveNumber,
+        NegativeNumber,
+    };
 
     #[test]
     fn encode_mod_0() {

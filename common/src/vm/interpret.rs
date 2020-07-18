@@ -35,6 +35,8 @@ pub enum Error {
     TwoNumbersOpInDifferentModulation { number_a: EncodedNumber, number_b: EncodedNumber, },
     DivisionByZero,
     IsNilAppOnANumber { number: EncodedNumber, },
+    ModOnModulatedNumber { number: EncodedNumber, },
+    DemOnDemodulatedNumber { number: EncodedNumber, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -442,6 +444,23 @@ impl Interpreter {
                                 }),
                         },
 
+                    // IfZero1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, }))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 {
+                            cond, true_clause: arg,
+                        })),
+
+                    // IfZero2 on a something
+                    (Some(State::EvalAppFun { arg: false_clause, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 { cond, true_clause, }))) => {
+                        ast_node = match cond {
+                            EncodedNumber { number: Number::Positive(PositiveNumber { value: 0, }), .. } =>
+                                true_clause,
+                            EncodedNumber { .. } =>
+                                false_clause,
+                        };
+                        break;
+                    },
+
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         match env.lookup_ast(&fun_ast_node) {
@@ -458,6 +477,12 @@ impl Interpreter {
                                     arg: Box::new(arg_ast_node),
                                 }),
                         },
+
+                    // if0 on a number
+                    (Some(State::EvalAppArgNum { fun: EvalFunNum::IfZero0, }), EvalOp::Num { number, }) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 {
+                            cond: number,
+                        })),
 
                     // inc on positive number
                     (
@@ -539,27 +564,27 @@ impl Interpreter {
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
                         EvalOp::Num {
-                            number: EncodedNumber {
-                                number: _,
+                            number: number @ EncodedNumber {
                                 modulation: Modulation::Modulated,
+                                ..
                             },
                         },
                     ) =>
-                        panic!("render failure: modulation of a modulated number"),
+                        return Err(Error::ModOnModulatedNumber { number, }),
 
                     // mod on demodulated number
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
                         EvalOp::Num {
                             number: EncodedNumber {
-                                number: number,
+                                number,
                                 modulation: Modulation::Demodulated,
                             },
                         },
                     ) =>
                         eval_op = EvalOp::Num {
                             number: EncodedNumber {
-                                number: number,
+                                number,
                                 modulation: Modulation::Modulated,
                             },
                         },
@@ -568,28 +593,27 @@ impl Interpreter {
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
                         EvalOp::Num {
-                            number: EncodedNumber {
-                                number: _,
+                            number: number @ EncodedNumber {
                                 modulation: Modulation::Demodulated,
+                                ..
                             },
                         },
                     ) =>
-                        panic!("render failure: demodulation of a demodulated number"),
-
+                        return Err(Error::DemOnDemodulatedNumber { number, }),
 
                     // dem on modulated number
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
                         EvalOp::Num {
                             number: EncodedNumber {
-                                number: number,
+                                number,
                                 modulation: Modulation::Modulated,
                             },
                         },
                     ) =>
                         eval_op = EvalOp::Num {
                             number: EncodedNumber {
-                                number: number,
+                                number,
                                 modulation: Modulation::Demodulated,
                             },
                         },
@@ -1238,6 +1262,7 @@ pub enum EvalFunNum {
     Neg0,
     Mod0,
     Dem0,
+    IfZero0,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1267,6 +1292,8 @@ pub enum EvalFunAbs {
     Cdr0,
     Nil0,
     IsNil0,
+    IfZero1 { cond: EncodedNumber, },
+    IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
 }
 
 impl EvalOp {
@@ -1335,7 +1362,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::MultipleDraw)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::If0)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)),
             Op::Const(Const::Fun(Fun::Interact)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Modem)) =>
@@ -1514,6 +1541,25 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Dem))]),
+
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::If0))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, })) =>
+                Ops(vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::If0)),
+                    Op::Const(Const::EncodedNumber(cond)),
+                ]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 { cond, true_clause, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::If0)),
+                    Op::Const(Const::EncodedNumber(cond)),
+                ];
+                ops.extend(true_clause.render().0);
+                Ops(ops)
+            },
 
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),

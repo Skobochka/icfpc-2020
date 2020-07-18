@@ -23,7 +23,12 @@ fn main() -> Result<(),Error> {
     let script = AsmParser.parse_script(&buffer).map_err(Error::Parse)?;
     let inter = Interpreter{};
     let env = inter.eval_script(script).map_err(Error::Vm)?;
-    let oops = env.lookup(Ops(vec![Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1338 }) })]));
+    let oops = inter.lookup_env(
+        &env,
+        Ops(vec![
+            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1338, }), }),
+        ]),
+    );
     println!("{:?}",oops);
     //Const(Fun(Galaxy))
 

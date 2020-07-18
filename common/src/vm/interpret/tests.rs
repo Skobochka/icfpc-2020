@@ -40,6 +40,7 @@ mod cons;
 mod car;
 mod cdr;
 mod nil;
+mod is_nil;
 
 #[test]
 fn ast_tree_basic() {

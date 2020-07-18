@@ -29,6 +29,7 @@ pub enum Error {
     AppExpectsNumButFunProvided { fun: EvalFun, },
     TwoNumbersOpInDifferentModulation { number_a: EncodedNumber, number_b: EncodedNumber, },
     DivisionByZero,
+    IsNilAppOnANumber { number: EncodedNumber, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -109,6 +110,7 @@ impl Interpreter {
         enum State {
             EvalAppFun { arg: AstNode, },
             EvalAppArgNum { fun: EvalFunNum, },
+            EvalAppArgIsNil,
         }
 
         let mut states = vec![];
@@ -216,6 +218,33 @@ impl Interpreter {
                         break;
                     },
 
+                    // S0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 {
+                            x: arg,
+                        })),
+
+                    // S1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 { x, }))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 {
+                            x, y: arg,
+                        })),
+
+                    // S2 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, }))) => {
+                        ast_node = AstNode::App {
+                            fun: Box::new(AstNode::App {
+                                fun: Box::new(x),
+                                arg: Box::new(arg.clone()),
+                            }),
+                            arg: Box::new(AstNode::App {
+                                fun: Box::new(y),
+                                arg: Box::new(arg),
+                            }),
+                        };
+                        break;
+                    },
+
                     // Cons0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 {
@@ -264,30 +293,10 @@ impl Interpreter {
                         break;
                     },
 
-                    // S0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S0))) =>
-                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 {
-                            x: arg,
-                        })),
-
-                    // S1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 { x, }))) =>
-                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 {
-                            x, y: arg,
-                        })),
-
-                    // S2 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(x),
-                                arg: Box::new(arg.clone()),
-                            }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(y),
-                                arg: Box::new(arg),
-                            }),
-                        };
+                    // IsNil0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0))) => {
+                        states.push(State::EvalAppArgIsNil);
+                        ast_node = arg;
                         break;
                     },
 
@@ -295,6 +304,29 @@ impl Interpreter {
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         eval_op = EvalOp::Abs(AstNode::App {
                             fun: Box::new(fun_ast_node),
+                            arg: Box::new(arg_ast_node),
+                        }),
+
+                    // IsNil on a number
+                    (Some(State::EvalAppArgIsNil), EvalOp::Num { number, }) =>
+                        return Err(Error::IsNilAppOnANumber { number, }),
+
+                    // IsNil on a Nil0
+                    (Some(State::EvalAppArgIsNil), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
+                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), };
+                        break;
+                    },
+
+                    // IsNil on another fun
+                    (Some(State::EvalAppArgIsNil), EvalOp::Fun(..)) => {
+                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), };
+                        break;
+                    },
+
+                    // IsNil on an abstract
+                    (Some(State::EvalAppArgIsNil), EvalOp::Abs(arg_ast_node)) =>
+                        eval_op = EvalOp::Abs(AstNode::App {
+                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
                             arg: Box::new(arg_ast_node),
                         }),
 
@@ -1036,6 +1068,7 @@ pub enum EvalFunAbs {
     Car0,
     Cdr0,
     Nil0,
+    IsNil0,
 }
 
 impl EvalOp {
@@ -1088,7 +1121,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Nil)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0)),
             Op::Const(Const::Fun(Fun::IsNil)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)),
             Op::Const(Const::Fun(Fun::LeftParen)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Comma)) =>
@@ -1272,6 +1305,8 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Cdr))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),
         }

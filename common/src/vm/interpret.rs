@@ -675,6 +675,88 @@ impl Interpreter {
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)),
 
+                    // lt0 on a number
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Lt0, }),
+                        EvalOp::Num { number, },
+                    ) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt1 {
+                            captured: number,
+                        })),
+
+                    // lt1 on two numbers with different modulation
+                    (
+                        Some(State::EvalAppArgNum {
+                            fun: EvalFunNum::Lt1 {
+                                captured: number_a @ EncodedNumber {
+                                    modulation: Modulation::Modulated,
+                                    ..
+                                },
+                            },
+                        }),
+                        EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
+                    ) |
+                    (
+                        Some(State::EvalAppArgNum {
+                            fun: EvalFunNum::Lt1 {
+                                captured: number_a @ EncodedNumber {
+                                    modulation: Modulation::Demodulated,
+                                    ..
+                                },
+                            },
+                        }),
+                        EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
+                    ) =>
+                        return Err(Error::TwoNumbersOpInDifferentModulation { number_a, number_b, }),
+
+                    // lt1 on two positive
+                    (
+                        Some(State::EvalAppArgNum {
+                            fun: EvalFunNum::Lt1 {
+                                captured: EncodedNumber { number: Number::Positive(PositiveNumber { value: value_a, }), .. },
+                            },
+                        }),
+                        EvalOp::Num {
+                            number: EncodedNumber { number: Number::Positive(PositiveNumber { value: value_b, }), .. },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(if value_a < value_b {
+                            EvalFunAbs::True0
+                        } else {
+                            EvalFunAbs::False0
+                        })),
+
+                    // lt1 on two negative
+                    (
+                        Some(State::EvalAppArgNum {
+                            fun: EvalFunNum::Lt1 {
+                                captured: EncodedNumber { number: Number::Negative(NegativeNumber { value: value_a, }), .. },
+                            },
+                        }),
+                        EvalOp::Num {
+                            number: EncodedNumber { number: Number::Negative(NegativeNumber { value: value_b, }), .. },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(if value_a < value_b {
+                            EvalFunAbs::True0
+                        } else {
+                            EvalFunAbs::False0
+                        })),
+
+                    // lt1 on positive and negative
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Lt1 { captured: EncodedNumber { number: Number::Positive(..), .. }, }, }),
+                        EvalOp::Num { number: EncodedNumber { number: Number::Negative(..), .. }, },
+                    ) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)),
+
+                    // lt1 on negative and positive
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Lt1 { captured: EncodedNumber { number: Number::Negative(..), .. }, }, }),
+                        EvalOp::Num { number: EncodedNumber { number: Number::Positive(..), .. }, },
+                    ) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
+
                     // number type argument fun on a fun
                     (Some(State::EvalAppArgNum { .. }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
@@ -744,6 +826,8 @@ pub enum EvalFunNum {
     Div1 { captured: EncodedNumber, },
     Eq0,
     Eq1 { captured: EncodedNumber, },
+    Lt0,
+    Lt1 { captured: EncodedNumber, },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -776,7 +860,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Eq)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq0)),
             Op::Const(Const::Fun(Fun::Lt)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt0)),
             Op::Const(Const::Fun(Fun::Mod)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Dem)) =>
@@ -872,6 +956,13 @@ impl EvalOp {
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq1 { captured, })) =>
                 Ops(vec![
                     Op::Const(Const::Fun(Fun::Eq)),
+                    Op::Const(Const::EncodedNumber(captured)),
+                ]),
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Lt))]),
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt1 { captured, })) =>
+                Ops(vec![
+                    Op::Const(Const::Fun(Fun::Lt)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
             EvalOp::Fun(EvalFun::ArgFun(..)) =>

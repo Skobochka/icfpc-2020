@@ -30,6 +30,7 @@ mod div;
 mod op_true;
 mod op_false;
 mod eq;
+mod lt;
 
 #[test]
 fn ast_tree_basic() {

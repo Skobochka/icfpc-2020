@@ -41,6 +41,7 @@ mod car;
 mod cdr;
 mod nil;
 mod is_nil;
+mod various;
 
 #[test]
 fn ast_tree_basic() {

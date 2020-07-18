@@ -6,7 +6,9 @@ grid_number_literal = _{ grid_positive_number_literal | grid_negative_number_lit
 
 variable = @{ "x" ~ ASCII_DIGIT+ }
 
-func = _{
+func = _{ named_func | unnamed_func }
+
+named_func = {
     ap_
   | inc_ | dec_ | add_ | mul_ | div_ | neg_ | pwr2_
   | true_ | false_ | eq_ | lt_
@@ -15,7 +17,6 @@ func = _{
   | cons_ | car_ | cdr_ | nil_ | isnil_ | vec_
   | draw_ | multipledraw_ | checkerboard_
   | modem_ | interact_ | f38_ | statelessdraw_
-  | unnamed_func
 }
   ap_ = { "ap" }
 
@@ -63,14 +64,20 @@ func = _{
 
 equal_sign = { "=" }
 
-expr = _{ grid_number_literal | func | list_construction }
+expr = _{ grid_number_literal | variable | func | list_construction }
 
 list_construction = {
     "(" ~ ")"
   | "(" ~ expr ~ ("," ~ expr )* ~ ")"
 }
 
-statement = { SOI ~ expr+ ~ equal_sign ~ expr+ ~ EOI }
+statement = _{ expr+ ~ equal_sign ~ expr+ }
+script = {
+    SOI
+  ~ (statement? ~ NEWLINE)*
+  ~ statement?
+  ~ EOI
+}
 
 // TODO: modulated literals support
 // modulated_number_literal = _{ modulated_positive_number_literal | modulated_negative_number_literal }

@@ -255,6 +255,26 @@ mod tests {
     }
 
     #[test]
+    fn simple_unnamed_functions_lightning() {
+        let parser = AsmParser::new();
+        assert_eq!(
+            parser.parse_script(":1234 = inc"),
+            Ok(Script {
+                statements: vec![
+                    Statement::Equality(Equality {
+                        left: Ops(vec![
+                            Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1234 })})
+                        ]),
+                        right: Ops(vec![
+                            Op::Const(Const::Fun(Fun::Inc))
+                        ]),
+                    }),
+                ],
+            }));
+    }
+    
+    
+    #[test]
     fn regression_nospace() {
         let parser = AsmParser::new();
         assert!(parser.parse_script("cc = ss").is_err());

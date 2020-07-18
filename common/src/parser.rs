@@ -28,6 +28,7 @@ pub struct AsmParser;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
     PestParsingError(pest::error::Error<Rule>),
+    Unknown,
 }
 
 impl AsmParser {
@@ -63,12 +64,29 @@ impl AsmParser {
             Rule::add_ => Fun::Sum,
             Rule::mul_ => Fun::Mul,
             Rule::div_ => Fun::Div,
+            Rule::eq_ => Fun::Eq,
+            Rule::lt_ => Fun::Lt,
 
             Rule::vec_ => Fun::Vec,
             Rule::cons_ => Fun::Cons,
             Rule::car_ => Fun::Car,
             Rule::cdr_ => Fun::Cdr,
             Rule::nil_ => Fun::Nil,
+            Rule::isnil_ => Fun::IsNil,
+
+            Rule::neg_ => Fun::Neg,
+            Rule::mod_ => Fun::Mod,
+            Rule::dem_ => Fun::Dem,
+
+            Rule::s_ => Fun::S,
+            Rule::c_ => Fun::C,
+            Rule::b_ => Fun::B,
+            Rule::i_ => Fun::I,
+            Rule::true_ => Fun::True,
+            Rule::false_ => Fun::False,
+
+            Rule::galaxy_ => Fun::Galaxy,
+
             _ => {
                 println!("parse_func() fail {:?}", func.as_rule());
                 unreachable!()
@@ -77,7 +95,7 @@ impl AsmParser {
     }
 
     pub fn parse_expr(&self, expr: Pair<Rule>) -> Op {
-        // println!("Expr: {:?}", expr.as_str());
+        println!("Expr: {:?}", expr.as_str());
         match expr.as_rule() {
             Rule::named_func => {
                 let mut inner_rules = expr.into_inner();
@@ -97,7 +115,7 @@ impl AsmParser {
             Rule::grid_positive_number_literal | Rule::grid_negative_number_literal =>
                 Op::Const(Const::EncodedNumber(self.parse_number(expr))),
             _ => {
-                println!("LOL {:?}", expr.as_rule());
+                println!("parse_expr() fail {:?}", expr.as_rule());
                 unreachable!()
             }
         }
@@ -111,7 +129,7 @@ impl AsmParser {
         let mut in_left = true;
         let mut left = Vec::<Op>::new();
         let mut right = Vec::<Op>::new();
-        
+
         loop {
             match part_iter.next() {
                 Some(node) => {
@@ -126,18 +144,25 @@ impl AsmParser {
                 None => break,
             }
         }
-        
+
         Statement::Equality ( Equality { left: Ops(left), right: Ops(right) } )
     }
 
     pub fn parse_script(&self, input: &str) -> Result<Script, Error> {
         let mut statements =  Vec::<Statement>::new();
-        
+
         for line in input.trim().split('\n') {
             let res = AsmParser::parse(Rule::statement, line);
             match res {
                 Ok(mut statement) => {
-                    statements.push(self.parse_statement(statement.next().unwrap()));
+                    match statement.next() {
+                        Some(statement_node) => {
+                            statements.push(self.parse_statement(statement_node));
+                        },
+                        None => {
+                            return Err(Error::Unknown)
+                        }
+                    }
                 },
                 Err(e) => {
                     return Err(Error::PestParsingError(e))
@@ -235,6 +260,14 @@ mod tests {
         assert!(parser.parse_script("cc = ss").is_err());
     }
 
+    #[test]
+    fn galaxy_smoke_test() {
+        let parser = AsmParser::new();
+        let galaxy = include_str!("../../problems/galaxy.txt");
+
+        assert!(parser.parse_script(galaxy).is_ok())
+    }
+
     // #[test]
     // fn galaxy_line1() {
     //     let parser = AsmParser::new();
@@ -253,4 +286,5 @@ mod tests {
     //             ],
     //         }));
     // }
+
 }

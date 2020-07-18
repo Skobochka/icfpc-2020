@@ -19,6 +19,7 @@ named_func = {
   | modem_ | interact_ | f38_ | statelessdraw_
   | s_ | c_ | b_ | i_ | if0_
   | true_ | false_ | eq_ | lt_
+  | galaxy_
 }
   dec_ = { "dec" }
   inc_ = { "inc" }
@@ -58,6 +59,8 @@ named_func = {
   interact_ = { "interact" }
   f38_ = { "f38" } // TODO: better name?
   statelessdraw_ = { "statelessdraw" }
+
+  galaxy_ = { "galaxy" }
 
 // Corresponds to unknown (yet?) function with the number
 func_name = { ASCII_DIGIT+ }

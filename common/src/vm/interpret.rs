@@ -757,6 +757,52 @@ impl Interpreter {
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
 
+                    // neg on zero
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Neg0, }),
+                        number @ EvalOp::Num {
+                            number: EncodedNumber {
+                                number: Number::Positive(PositiveNumber { value: 0, }),
+                                ..
+                            },
+                        },
+                    ) =>
+                        eval_op = number,
+
+                    // neg on positive number
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Neg0, }),
+                        EvalOp::Num {
+                            number: EncodedNumber {
+                                number: Number::Positive(PositiveNumber { value, }),
+                                modulation,
+                            },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Num {
+                            number: EncodedNumber {
+                                number: Number::Negative(NegativeNumber { value: -(value as isize), }),
+                                modulation,
+                            },
+                        },
+
+                    // neg on negative number
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Neg0, }),
+                        EvalOp::Num {
+                            number: EncodedNumber {
+                                number: Number::Negative(NegativeNumber { value, }),
+                                modulation,
+                            },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Num {
+                            number: EncodedNumber {
+                                number: Number::Positive(PositiveNumber { value: ((-value) as usize), }),
+                                modulation,
+                            },
+                        },
+
                     // number type argument fun on a fun
                     (Some(State::EvalAppArgNum { .. }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
@@ -828,6 +874,7 @@ pub enum EvalFunNum {
     Eq1 { captured: EncodedNumber, },
     Lt0,
     Lt1 { captured: EncodedNumber, },
+    Neg0,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -868,7 +915,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Send)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Neg)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Neg0)),
             Op::Const(Const::Fun(Fun::S)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::C)) =>
@@ -965,6 +1012,8 @@ impl EvalOp {
                     Op::Const(Const::Fun(Fun::Lt)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Neg0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Neg))]),
             EvalOp::Fun(EvalFun::ArgFun(..)) =>
                 unimplemented!(),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)) =>

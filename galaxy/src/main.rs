@@ -71,8 +71,19 @@ impl Tokens {
                 "b" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::B)))),
                 "s" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::S)))),
                 "c" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::C)))),
+                "i" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::I)))),
+                "t" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::True)))),
+                "f" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::False)))),
+                "eq" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Eq)))),
+                "lt" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Lt)))),
+                "add" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Sum)))),
+                "mul" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Mul)))),
+                "neg" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Neg)))),
                 "cons" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Cons)))),
+                "cdr" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Cdr)))),
+                "car" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Car)))),
                 "nil" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::Nil)))),
+                "isnil" => new_v.push(Token::Op(Op::Const(Const::Fun(Fun::IsNil)))),
                 s @_ if s.starts_with(":") => new_v.push(Token::Rewrite(s.to_string())),
                 _ => new_v.push(Token::Unknown(s.to_string())),
             }
@@ -145,8 +156,36 @@ fn main() -> Result<(),String> {
             print!("{:?}, ",k);
         }
 }*/
-    let key = ":1111";
-    let tokens = Tokens::from(map.get(key).ok_or(format!("No key: {}",key))?);
+    for (key,vs) in map.iter() {
+        let tokens = Tokens::from(vs);
+        //println!("Tokens: {:?}",tokens);
+        match tokens.try_ops() {
+            Ok(ops) => {
+                let vm = Interpreter{};
+                let mut env = Env{};
+                //println!("Ops:    {:?}",ops);
+                match vm.build_tree(ops) {
+                    Ok(tree) => {
+                        match vm.eval(tree,&mut env) {
+                            Ok(ops) => {
+                                //println!("Result: {:?}",ops);
+                            },
+                            Err(e) => println!("Try eval error: {:?}",e),
+                        }
+                    },
+                    Err(e) => println!("Try tree error: {:?}",e),
+                }
+            },
+            Err(t) => println!("Try ops error on: {:?}",t),
+        }
+    }
+
+    Ok(())
+}*/
+
+/*
+
+let tokens = Tokens::from(map.get(key).ok_or(format!("No key: {}",key))?);
     //println!("Tokens: {:?}",tokens);
     match tokens.try_ops() {
         Ok(ops) => {
@@ -166,6 +205,4 @@ fn main() -> Result<(),String> {
         Err(t) => println!("Try ops error on: {:?}",t),
     }
 
-    Ok(())
-}
 */

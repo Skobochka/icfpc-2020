@@ -442,6 +442,7 @@ fn eval_fun_sum() {
             interpreter.build_tree(
                 Ops(vec![
                     Op::App,
+                    Op::App,
                     Op::Const(Const::Fun(Fun::Sum)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {

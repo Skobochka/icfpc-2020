@@ -406,6 +406,65 @@ impl Interpreter {
                             },
                         },
 
+                    // mod on modulated number is error
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
+                        EvalOp::Num {
+                            number: EncodedNumber {
+                                number: _,
+                                modulation: Modulation::Modulated,
+                            },
+                        },
+                    ) =>
+                        panic!("render failure: modulation of a modulated number"),
+
+                    // mod on demodulated number
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
+                        EvalOp::Num {
+                            number: EncodedNumber {
+                                number: number,
+                                modulation: Modulation::Demodulated,
+                            },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Num {
+                            number: EncodedNumber {
+                                number: number,
+                                modulation: Modulation::Modulated,
+                            },
+                        },
+
+                    // dem on demodulated number is error
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
+                        EvalOp::Num {
+                            number: EncodedNumber {
+                                number: _,
+                                modulation: Modulation::Demodulated,
+                            },
+                        },
+                    ) =>
+                        panic!("render failure: demodulation of a demodulated number"),
+
+
+                    // dem on modulated number
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
+                        EvalOp::Num {
+                            number: EncodedNumber {
+                                number: number,
+                                modulation: Modulation::Modulated,
+                            },
+                        },
+                    ) =>
+                        eval_op = EvalOp::Num {
+                            number: EncodedNumber {
+                                number: number,
+                                modulation: Modulation::Demodulated,
+                            },
+                        },
+
                     // sum0 on a number
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Sum0, }),
@@ -1040,6 +1099,8 @@ pub enum EvalFunNum {
     Lt0,
     Lt1 { captured: EncodedNumber, },
     Neg0,
+    Mod0,
+    Dem0,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1091,9 +1152,9 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Lt)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt0)),
             Op::Const(Const::Fun(Fun::Mod)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)),
             Op::Const(Const::Fun(Fun::Dem)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)),
             Op::Const(Const::Fun(Fun::Send)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Neg)) =>
@@ -1312,6 +1373,12 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
+
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Dem))]),
+
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),
         }

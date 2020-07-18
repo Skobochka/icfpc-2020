@@ -27,6 +27,7 @@ mod dec;
 mod sum;
 mod mul;
 mod div;
+mod op_true;
 
 #[test]
 fn ast_tree_basic() {

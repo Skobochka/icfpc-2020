@@ -1354,7 +1354,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::RightParen)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Vec)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0)),
             Op::Const(Const::Fun(Fun::Draw)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Chkb)) =>

@@ -1424,6 +1424,8 @@ impl EvalOp {
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unreachable!(), // should be renamed to variable with name "-1"
+            Op::Const(Const::Picture(picture)) =>
+                EvalOp::Abs(AstNode::Literal { value: Op::Const(Const::Picture(picture)), }),
             Op::Variable(var) =>
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
             Op::App =>

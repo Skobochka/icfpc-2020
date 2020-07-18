@@ -165,8 +165,11 @@ impl Interpreter {
                         break;
                     },
 
-                    (Some(State::EvalAppFun { arg: _, }), EvalOp::Abs(..)) =>
-                        unimplemented!(),
+                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
+                        eval_op = EvalOp::Abs(AstNode::App {
+                            fun: Box::new(fun_ast_node),
+                            arg: Box::new(arg_ast_node),
+                        }),
 
                     // inc on positive number
                     (
@@ -206,10 +209,6 @@ impl Interpreter {
                             },
                         },
 
-                    // inc on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Inc0, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
-
                     // dec on positive number
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Dec0, }),
@@ -248,10 +247,6 @@ impl Interpreter {
                             },
                         },
 
-                    // dec on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Dec0, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
-
                     // sum0 on a number
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Sum0, }),
@@ -260,10 +255,6 @@ impl Interpreter {
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Sum1 {
                             captured: number,
                         })),
-
-                    // sum0 on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Sum0, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // sum1 on two numbers with different modulation
                     (
@@ -394,10 +385,6 @@ impl Interpreter {
                             },
                         },
 
-                    // sum1 on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Sum1 { .. }, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
-
                     // mul0 on a number
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Mul0, }),
@@ -406,10 +393,6 @@ impl Interpreter {
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mul1 {
                             captured: number,
                         })),
-
-                    // mul0 on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Mul0, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // mul1 on two numbers with different modulation
                     (
@@ -532,10 +515,6 @@ impl Interpreter {
                             },
                         },
 
-                    // mul1 on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Mul1 { .. }, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
-
                     // div0 on a number
                     (
                         Some(State::EvalAppArgNum { fun: EvalFunNum::Div0, }),
@@ -544,10 +523,6 @@ impl Interpreter {
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Div1 {
                             captured: number,
                         })),
-
-                    // div0 on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Div0, }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // div1 on a zero
                     (
@@ -677,8 +652,31 @@ impl Interpreter {
                             },
                         },
 
-                    // div1 on fun
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::Div1 { .. }, }), EvalOp::Fun(fun)) =>
+                    // eq0 on a number
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Eq0, }),
+                        EvalOp::Num { number, },
+                    ) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq1 {
+                            captured: number,
+                        })),
+
+                    // eq1 on two equal numbers
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Eq1 { captured: number_a, }, }),
+                        EvalOp::Num { number: number_b, },
+                    ) if number_a == number_b =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
+
+                    // eq1 on two different numbers
+                    (
+                        Some(State::EvalAppArgNum { fun: EvalFunNum::Eq1 { .. }, }),
+                        EvalOp::Num { .. },
+                    ) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)),
+
+                    // number type argument fun on a fun
+                    (Some(State::EvalAppArgNum { .. }), EvalOp::Fun(fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // fun on abs
@@ -744,6 +742,8 @@ pub enum EvalFunNum {
     Mul1 { captured: EncodedNumber, },
     Div0,
     Div1 { captured: EncodedNumber, },
+    Eq0,
+    Eq1 { captured: EncodedNumber, },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -774,7 +774,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Div)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Div0)),
             Op::Const(Const::Fun(Fun::Eq)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq0)),
             Op::Const(Const::Fun(Fun::Lt)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Mod)) =>
@@ -867,10 +867,29 @@ impl EvalOp {
                     Op::Const(Const::Fun(Fun::Div)),
                     Op::Const(Const::EncodedNumber(captured)),
                 ]),
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Eq))]),
+            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq1 { captured, })) =>
+                Ops(vec![
+                    Op::Const(Const::Fun(Fun::Eq)),
+                    Op::Const(Const::EncodedNumber(captured)),
+                ]),
             EvalOp::Fun(EvalFun::ArgFun(..)) =>
                 unimplemented!(),
-            EvalOp::Fun(EvalFun::ArgAbs(..)) =>
-                unimplemented!(),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::True))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, })) => {
+                let mut ops = vec![Op::Const(Const::Fun(Fun::True))];
+                ops.extend(captured.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::False))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { captured, })) => {
+                let mut ops = vec![Op::Const(Const::Fun(Fun::False))];
+                ops.extend(captured.render().0);
+                Ops(ops)
+            },
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),
         }

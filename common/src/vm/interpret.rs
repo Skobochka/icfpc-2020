@@ -395,17 +395,35 @@ impl Interpreter {
 
                     // IsNil on an abstract
                     (Some(State::EvalAppArgIsNil), EvalOp::Abs(arg_ast_node)) =>
-                        eval_op = EvalOp::Abs(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
-                            arg: Box::new(arg_ast_node),
-                        }),
+                        match env.lookup_ast(&arg_ast_node) {
+                            Some(subst_ast_node) => {
+                                states.push(State::EvalAppArgIsNil);
+                                ast_node = subst_ast_node.clone();
+                                break;
+                            },
+                            None =>
+                                eval_op = EvalOp::Abs(AstNode::App {
+                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
+                                    arg: Box::new(arg_ast_node),
+                                }),
+                        },
 
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
-                        eval_op = EvalOp::Abs(AstNode::App {
-                            fun: Box::new(fun_ast_node),
-                            arg: Box::new(arg_ast_node),
-                        }),
+                        match env.lookup_ast(&fun_ast_node) {
+                            Some(subst_ast_node) => {
+                                ast_node = AstNode::App {
+                                    fun: Box::new(subst_ast_node.clone()),
+                                    arg: Box::new(arg_ast_node),
+                                };
+                                break;
+                            }
+                            None =>
+                                eval_op = EvalOp::Abs(AstNode::App {
+                                    fun: Box::new(fun_ast_node),
+                                    arg: Box::new(arg_ast_node),
+                                }),
+                        },
 
                     // inc on positive number
                     (
@@ -1044,45 +1062,53 @@ impl Interpreter {
                         return Err(Error::AppExpectsNumButFunProvided { fun, }),
 
                     // fun on abs
-                    (Some(State::EvalAppArgNum { fun }), EvalOp::Abs(arg_ast_node)) => {
-                        let mut fun_ops_iter = EvalOp::Fun(EvalFun::ArgNum(fun))
-                            .render()
-                            .0
-                            .into_iter();
-                        let ast_node = match fun_ops_iter.next() {
-                            None =>
-                                panic!("render failure: expected op, but got none"),
-                            Some(Op::App) =>
-                                match fun_ops_iter.next() {
+                    (Some(State::EvalAppArgNum { fun }), EvalOp::Abs(arg_ast_node)) =>
+                        match env.lookup_ast(&arg_ast_node) {
+                            Some(subst_ast_node) => {
+                                states.push(State::EvalAppArgNum { fun, });
+                                ast_node = subst_ast_node.clone();
+                                break;
+                            },
+                            None => {
+                                let mut fun_ops_iter = EvalOp::Fun(EvalFun::ArgNum(fun))
+                                    .render()
+                                    .0
+                                    .into_iter();
+                                let ast_node = match fun_ops_iter.next() {
                                     None =>
-                                        panic!("render failure: expected op fun, but got none"),
-                                    Some(op_a) =>
+                                        panic!("render failure: expected op, but got none"),
+                                    Some(Op::App) =>
                                         match fun_ops_iter.next() {
                                             None =>
-                                                panic!("render failure: expected op {:?} arg, but got none", op_a),
-                                            Some(op_b) =>
+                                                panic!("render failure: expected op fun, but got none"),
+                                            Some(op_a) =>
                                                 match fun_ops_iter.next() {
                                                     None =>
-                                                        AstNode::App {
-                                                            fun: Box::new(AstNode::App {
-                                                                fun: Box::new(AstNode::Literal { value: op_a, }),
-                                                                arg: Box::new(AstNode::Literal { value: op_b, }),
-                                                            }),
-                                                            arg: Box::new(arg_ast_node),
+                                                        panic!("render failure: expected op {:?} arg, but got none", op_a),
+                                                    Some(op_b) =>
+                                                        match fun_ops_iter.next() {
+                                                            None =>
+                                                                AstNode::App {
+                                                                    fun: Box::new(AstNode::App {
+                                                                        fun: Box::new(AstNode::Literal { value: op_a, }),
+                                                                        arg: Box::new(AstNode::Literal { value: op_b, }),
+                                                                    }),
+                                                                    arg: Box::new(arg_ast_node),
+                                                                },
+                                                            Some(..) =>
+                                                                unreachable!(),
                                                         },
-                                                    Some(..) =>
-                                                        unreachable!(),
                                                 },
                                         },
-                                },
-                            Some(op_a) =>
-                                AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: op_a, }),
-                                    arg: Box::new(arg_ast_node),
-                                },
-                        };
-                        eval_op = EvalOp::Abs(ast_node);
-                    },
+                                    Some(op_a) =>
+                                        AstNode::App {
+                                            fun: Box::new(AstNode::Literal { value: op_a, }),
+                                            arg: Box::new(arg_ast_node),
+                                        },
+                                };
+                                eval_op = EvalOp::Abs(ast_node);
+                            },
+                        },
                 }
             }
         }

@@ -106,11 +106,12 @@ impl DotsXYT {
         let my = sy.abs()*2.0;
         let mut v = Vec::new();
         for coo in &data.data {
-            if (coo[0]<0.0)||(coo[1]<0.0)||(coo[0]>mx)||(coo[1]>my) {
+            if (coo[0]<sx)||(coo[1]<sy)||(coo[0]>mx)||(coo[1]>my) {
                 println!("Point out-of-range: {:?}",coo);
             }
             v.push(Obstacle::RectInTime{
-                rect: geom::RectExt::new([sx + coo[0],sy - coo[1]-1.0,1.0,1.0]).unwrap(),
+                //rect: geom::RectExt::new([sx + coo[0],sy - coo[1]-1.0,1.0,1.0]).unwrap(),
+                rect: geom::RectExt::new([coo[0],-coo[1],1.0,1.0]).unwrap(),
                 tm: 1.0,
             });
         }

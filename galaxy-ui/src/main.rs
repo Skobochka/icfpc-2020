@@ -112,7 +112,11 @@ impl Data {
 fn asm_to_opt_data(session: &mut Session, asm: &str) -> Option<Data> {
     //println!("ASM: {}",asm);
     match session.eval_asm(asm) {
-        Ok(ops) => Data::from_ops(ops),
+        Ok(ops) => {
+            let data = Data::from_ops(ops);
+            println!("{:?}",data);
+            data
+        },
         Err(e) => {
             println!("Error: {:?}",e);
             None
@@ -130,7 +134,8 @@ fn main() {
         },
     };
 
-    let init_asm = "ap draw ( ap ap vec 1 1 , ap ap vec 2 10 )";
+    //let init_asm = "ap draw ( ap ap vec 1 1 , ap ap vec 2 10 )";g
+    let init_asm = "ap car ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
     
     let init_data = match asm_to_opt_data(&mut session, init_asm) {
         Some(data) => data,
@@ -175,6 +180,11 @@ fn main() {
         main: MainScreen::new(&init_data,&cntx),
     };
     app.cursor(cursor);
+
+    let asm = "ap car ap cdr ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
+    if let Some(data) = asm_to_opt_data(&mut session, &asm) {
+        app.main.scene.map.next_data(&data);
+    }
     
     let mut t = std::time::Instant::now();
     while let Some(e) = events.next(&mut window) {
@@ -212,10 +222,11 @@ fn main() {
                     app.cursor(cursor);
                     {
                         let coo = app.main.scene.get_cursor().cursor;
-                        let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
-                        if let Some(data) = asm_to_opt_data(&mut session, &asm) {
-                            app.main.scene.map.next_data(&data);
-                        }
+                        //let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
+                        //let asm = "ap car ap cdr ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
+                        //if let Some(data) = asm_to_opt_data(&mut session, &asm) {
+                        //    app.main.scene.map.next_data(&data);
+                        //}
                         //println!("Click: {:?}",app.main.scene.get_cursor());
                     }
                     cursor.state = CursorState::None;

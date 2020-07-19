@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use super::{
-    super::encoder,
+    super::encoder::{
+        self,
+        Modulable,
+    },
     super::code::{
         Op,
         Ops,
@@ -48,6 +51,7 @@ pub enum Error {
     ListSyntaxClosingAfterComma,
     InvalidCoordForDrawArg,
     ExpectedOnlyTwoCoordsPointForDrawArg,
+    ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -1353,7 +1357,14 @@ impl Interpreter {
 
     fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
         let args_ops = send_args.render();
-        let _send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
+        let send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
+        let send_cons_list = match send_list_val {
+            encoder::ListVal::Number(number) =>
+                return Err(Error::ExpectedListArgForSendButGotNumber { number, }),
+            encoder::ListVal::Cons(value) =>
+                *value,
+        };
+        let _send_args_mod = send_cons_list.modulate_to_string();
 
         unimplemented!()
     }

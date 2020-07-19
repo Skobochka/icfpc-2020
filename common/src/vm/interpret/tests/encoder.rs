@@ -3,6 +3,7 @@ use super::{
     Interpreter,
     Op,
     Ops,
+    Fun,
     Const,
     Syntax,
     Number,
@@ -10,6 +11,7 @@ use super::{
     EncodedNumber,
     PositiveNumber,
     NegativeNumber,
+    super::list_val_to_ops,
 };
 
 use crate::encoder::{
@@ -18,7 +20,7 @@ use crate::encoder::{
 };
 
 #[test]
-fn eval() {
+fn encode() {
     let interpreter = Interpreter::new();
 
     assert_eq!(
@@ -106,5 +108,57 @@ fn eval() {
                 ))),
                 ListVal::Cons(Box::new(ConsList::Nil))))),
         ))),
+    );
+}
+
+#[test]
+fn decode() {
+    assert_eq!(
+        list_val_to_ops(
+            ListVal::Cons(Box::new(ConsList::Nil)),
+        ),
+        Ops(vec![
+            Op::Const(Const::Fun(Fun::Nil)),
+        ]),
+    );
+
+    let interpreter = Interpreter::new();
+
+    let cons_list = ListVal::Cons(Box::new(ConsList::Cons(
+        ListVal::Number(EncodedNumber {
+            number: Number::Positive(PositiveNumber { value: 1, }),
+            modulation: Modulation::Demodulated,
+        }),
+        ListVal::Cons(Box::new(ConsList::Cons(
+            ListVal::Number(EncodedNumber {
+                number: Number::Positive(PositiveNumber { value: 1, }),
+                modulation: Modulation::Demodulated,
+            }),
+            ListVal::Cons(Box::new(ConsList::Nil)),
+        ))),
+    )));
+    assert_eq!(
+        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new()).unwrap(),
+        cons_list,
+    );
+
+    let cons_list = ListVal::Cons(Box::new(ConsList::Cons(
+        ListVal::Number(EncodedNumber {
+            number: Number::Positive(PositiveNumber { value: 1, }),
+            modulation: Modulation::Demodulated,
+        }),
+        ListVal::Cons(Box::new(ConsList::Cons(
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Negative(NegativeNumber { value: -1, }),
+                    modulation: Modulation::Demodulated,
+                }),
+                ListVal::Cons(Box::new(ConsList::Nil)),
+            ))),
+            ListVal::Cons(Box::new(ConsList::Nil))))),
+    )));
+    assert_eq!(
+        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new()).unwrap(),
+        cons_list,
     );
 }

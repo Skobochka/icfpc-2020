@@ -1413,6 +1413,34 @@ impl Interpreter {
     }
 }
 
+fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
+    let mut ops = Ops(vec![]);
+    loop {
+        match value {
+            encoder::ListVal::Number(number) => {
+                ops.0.push(Op::Const(Const::EncodedNumber(number)));
+                break;
+            },
+            encoder::ListVal::Cons(cons_list) =>
+                match *cons_list {
+                    encoder::ConsList::Nil => {
+                        ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
+                        break;
+                    },
+                    encoder::ConsList::Cons(car, cdr) => {
+                        ops.0.push(Op::App);
+                        ops.0.push(Op::App);
+                        ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
+                        let car_ops = list_val_to_ops(car);
+                        ops.0.extend(car_ops.0);
+                        value = cdr;
+                    },
+                },
+        }
+    }
+    ops
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum EvalOp {
     Num { number: EncodedNumber, },

@@ -1353,44 +1353,43 @@ impl Interpreter {
 
     fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
         let args_ops = send_args.render();
-        let _send_cons_list = self.eval_ops_to_cons_list(args_ops, env)?;
+        let _send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
 
         unimplemented!()
     }
 
-    fn eval_ops_to_cons_list(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ConsList, Error> {
-        let mut cons_list = encoder::ConsList::Nil;
+    fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ListVal, Error> {
+        match (list_ops.0.len(), list_ops.0.pop()) {
+            (_, None) =>
+                unreachable!(),
+            (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                return Ok(encoder::ListVal::Number(number)),
+            (_, Some(last_item)) =>
+                list_ops.0.push(last_item),
+        }
 
+        let mut cons_stack = vec![];
         loop {
             let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
             if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
                 break;
             }
 
-            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
-            match (ops.0.len(), ops.0.pop()) {
-                (_, None) =>
-                    unreachable!(),
-                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
-                    cons_list = encoder::ConsList::Cons(
-                        encoder::ListVal::Number(number),
-                        encoder::ListVal::Cons(Box::new(cons_list)),
-                    ),
-                (_, Some(last_item)) => {
-                    // probably a sublist here
-                    ops.0.push(last_item);
-                    let child_cons_list = self.eval_ops_to_cons_list(ops, env)?;
-                    cons_list = encoder::ConsList::Cons(
-                        encoder::ListVal::Cons(Box::new(child_cons_list)),
-                        encoder::ListVal::Cons(Box::new(cons_list)),
-                    );
-                },
-            }
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            let child_list_val = self.eval_ops_to_list_val(ops, env)?;
+            cons_stack.push(child_list_val);
 
             list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
         }
 
-        Ok(cons_list)
+        let mut cons_list = encoder::ConsList::Nil;
+        while let Some(item) = cons_stack.pop() {
+            cons_list = encoder::ConsList::Cons(
+                item,
+                encoder::ListVal::Cons(Box::new(cons_list)),
+            );
+        }
+        Ok(encoder::ListVal::Cons(Box::new(cons_list)))
     }
 
     fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env) -> Result<Ops, Error> {

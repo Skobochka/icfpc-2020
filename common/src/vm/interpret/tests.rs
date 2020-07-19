@@ -49,6 +49,7 @@ mod list;
 mod draw;
 mod env;
 mod various;
+mod encoder;
 
 #[test]
 fn ast_tree_basic() {

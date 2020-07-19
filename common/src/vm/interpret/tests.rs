@@ -103,94 +103,7 @@ fn ast_tree_basic() {
         interpreter.build_tree(
             Ops(vec![Op::App, Op::Const(Const::Fun(Fun::Inc))]),
         ),
-        Err(Error::NoAppArgProvided { fun: AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), }, }),
-    );
-
-    assert_eq!(
-        interpreter.build_tree(
-            Ops(vec![
-                Op::App,
-                Op::Variable(Variable {
-                    name: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                }),
-                Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                    modulation: Modulation::Demodulated,
-                })),
-            ]),
-        ),
-        Ok(Ast::Tree(AstNode::App {
-            fun: Box::new(AstNode::Literal {
-                value: Op::Variable(Variable {
-                    name: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                }),
-            }),
-            arg: Box::new(AstNode::Literal {
-                value: Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                    modulation: Modulation::Demodulated,
-                })),
-            }),
-        })),
-    );
-
-    assert_eq!(
-        interpreter.build_tree(
-            Ops(vec![
-                Op::App,
-                Op::App,
-                Op::Variable(Variable {
-                    name: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                }),
-                Op::Variable(Variable {
-                    name: Number::Positive(PositiveNumber {
-                        value: 2,
-                    }),
-                }),
-                Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                    modulation: Modulation::Demodulated,
-                })),
-            ]),
-        ),
-        Ok(Ast::Tree(AstNode::App {
-            fun: Box::new(AstNode::App {
-                fun: Box::new(AstNode::Literal {
-                    value: Op::Variable(Variable {
-                        name: Number::Positive(PositiveNumber {
-                            value: 1,
-                        }),
-                    }),
-                }),
-                arg: Box::new(AstNode::Literal {
-                    value: Op::Variable(Variable {
-                        name: Number::Positive(PositiveNumber {
-                            value: 2,
-                        }),
-                    }),
-                }),
-            }),
-            arg: Box::new(AstNode::Literal {
-                value: Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                    modulation: Modulation::Demodulated,
-                })),
-            }),
-        })),
+        Err(Error::NoAppArgProvided { fun: std::rc::Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), }), }),
     );
 }
 
@@ -259,13 +172,13 @@ fn eval_basic() {
                 }),
                 modulation: Modulation::Demodulated,
             },
-            arg: AstNode::Literal {
+            arg: std::rc::Rc::new(AstNode::Literal {
                 value: Op::Variable(Variable {
                     name: Number::Positive(PositiveNumber {
                         value: 1,
                     }),
                 }),
-            },
+            }),
         }),
     );
 }

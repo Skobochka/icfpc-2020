@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::{
     Env,
     Interpreter,
@@ -17,9 +19,9 @@ fn render_interact() {
 
     assert_eq!(
         interpreter.eval_interact(
-            AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 777, }), }), },
-            AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 111, }), }), },
-            AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 333, }), }), },
+            Rc::new(AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 777, }), }), }),
+            Rc::new(AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 111, }), }), }),
+            Rc::new(AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 333, }), }), }),
             &Env::new(),
         ).unwrap().render(),
         Ops(vec![
@@ -42,8 +44,8 @@ fn render_f38() {
 
     assert_eq!(
         interpreter.eval_f38(
-            AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 777, }), }), },
-            AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 111, }), }), },
+            Rc::new(AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 777, }), }), }),
+            Rc::new(AstNode::Literal { value: Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 111, }), }), }),
             &Env::new(),
         ).unwrap().render(),
         Ops(vec![

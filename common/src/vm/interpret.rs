@@ -136,6 +136,27 @@ impl Env {
     }
 }
 
+#[derive(Debug)]
+pub struct Cache {
+    memo: HashMap<Rc<AstNode>, Rc<AstNode>>,
+}
+
+impl Cache {
+    pub fn new() -> Cache {
+        Cache {
+            memo: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, key: &Rc<AstNode>) -> Option<Rc<AstNode>> {
+        if let Some(ast_node) = self.memo.get(key) {
+            Some(ast_node.clone())
+        } else {
+            None
+        }
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
@@ -292,15 +313,19 @@ impl Interpreter {
     }
 
     pub fn eval(&self, ast: Ast, env: &Env) -> Result<Ops, Error> {
+        self.eval_cache(ast, env, None)
+    }
+
+    pub fn eval_cache(&self, ast: Ast, env: &Env, cache: Option<&mut Cache>) -> Result<Ops, Error> {
         match ast {
             Ast::Empty =>
                 Err(Error::EvalEmptyTree),
             Ast::Tree(node) =>
-                self.eval_tree(node, env),
+                self.eval_tree(node, env, cache),
         }
     }
 
-    fn eval_tree(&self, ast_node: AstNode, env: &Env) -> Result<Ops, Error> {
+    fn eval_tree(&self, ast_node: AstNode, env: &Env, mut cache: Option<&mut Cache>) -> Result<Ops, Error> {
         let mut ast_node = Rc::new(ast_node);
 
         enum State {
@@ -311,6 +336,11 @@ impl Interpreter {
 
         let mut states = vec![];
         loop {
+            if let Some(memo_ast) = cache.as_ref().and_then(|memo| memo.get(&ast_node)) {
+                ast_node = memo_ast;
+                continue;
+            }
+
             let mut eval_op = match &*ast_node {
                 AstNode::Literal { value, } =>
                     EvalOp::new(value.clone()),

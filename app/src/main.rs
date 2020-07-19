@@ -101,19 +101,27 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server_url = &args[1];
     let player_key = &args[2];
 
-    let intercom = Intercom::new(server_url.clone(), player_key.clone());
+    let intercom = Intercom::new(server_url.clone());
     let mut runtime = Runtime::new().unwrap();
     
     let join_request = make_join_request(player_key);
-    println!("Sending JOIN command: {}", &join_request);
+    println!("Sending JOIN request: {}", &join_request);
     let join_response = intercom.send(join_request.clone(), &mut runtime).unwrap();
-    println!("JOIN command response: {}", &join_response);
+    println!("JOIN response: {}", &join_response);
 
-    let start_request = make_join_request(player_key);
-    println!("Sending START command: {}", &join_request);
+    let start_request = make_start_request(player_key, 0, 0, 0, 0);
+    println!("Sending START request: {}", &start_request);
     let start_response = intercom.send(start_request.clone(), &mut runtime).unwrap();
-    println!("START command response: {}", &start_response);
+    println!("START response: {}", &start_response);
 
+    for turn in 0..255 {
+        println!("TURN {}", turn);
+
+        let commands_request = make_empty_commands_request(player_key);
+        println!("Sending COMMANDS request: {}", &start_request);
+        let commands_response = intercom.send(commands_request.clone(), &mut runtime).unwrap();
+        println!("COMMANDS response: {}", &commands_response);
+    }
 
     Ok(())
 }

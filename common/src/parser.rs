@@ -95,6 +95,7 @@ impl AsmParser {
 
             Rule::interact_ => Fun::Interact,
             Rule::galaxy_ => Fun::Galaxy,
+            Rule::render_ => Fun::Render,
 
             _ => {
                 unimplemented!("parse_func() {:?}", func.as_rule());
@@ -471,6 +472,11 @@ mod tests {
                         modulation: Modulation::Demodulated,
                     })),
                 ])));
+        assert_eq!(parser.parse_expression("ap render"),
+                   Ok(Ops(vec![
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::Render)),
+                           ])));
     }
 
 

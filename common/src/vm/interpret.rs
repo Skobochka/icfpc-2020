@@ -44,6 +44,9 @@ pub enum OuterRequest {
         modulated_req: String,
         modulated_rep: mpsc::Sender<String>,
     },
+    RenderPictures {
+        pictures: Vec<Picture>,
+    },
 }
 
 
@@ -1837,6 +1840,8 @@ impl EvalOp {
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::F38)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0)),
+            Op::Const(Const::Fun(Fun::Render)) =>
+                unimplemented!(),
             Op::App =>
                 unreachable!(), // should be processed by ast builder
             Op::Syntax(..) =>

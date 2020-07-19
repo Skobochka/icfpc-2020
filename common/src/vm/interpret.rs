@@ -1344,9 +1344,35 @@ impl Interpreter {
         Ok(Picture { points: points_vec, })
     }
 
-    fn eval_multiple_draw(&self, _points_list_of_lists: AstNode, _env: &Env) -> Result<AstNode, Error> {
+    fn eval_multiple_draw(&self, points_list_of_lists: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let mut list_ops = points_list_of_lists.render();
 
-        unimplemented!()
+        let mut output_ops = Ops(vec![]);
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let child_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            output_ops.0.push(Op::App);
+            output_ops.0.push(Op::App);
+            output_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
+            output_ops.0.push(Op::App);
+            output_ops.0.push(Op::Const(Const::Fun(Fun::Draw)));
+            output_ops.0.extend(child_ops.0);
+
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+
+        }
+        output_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
+
+        match self.build_tree(output_ops)? {
+            Ast::Empty =>
+                unreachable!(), // we should got at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
     }
 
     fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {

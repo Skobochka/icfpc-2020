@@ -1,14 +1,18 @@
-use http_body::Body as _;
-use hyper::{Client, Request, Method, Body, StatusCode};
 use std::env;
 use std::process;
+use tokio::runtime::Runtime;
+
+
+use common::send::{
+    Intercom,
+};
 
 use common::code::{
     EncodedNumber,
     PositiveNumber,
     Modulation,
     Number,
-    make_dem_number,
+    make_mod_number,
 };
 
 use common::encoder::{
@@ -26,9 +30,9 @@ fn make_join_request(key_str: &str) -> String {
     let unknown_param = ListVal::Cons(Box::new(ConsList::Nil));
 
     let request = ConsList::Cons(
-        ListVal::Number(make_dem_number(2)),
+        ListVal::Number(make_mod_number(2)),
         ListVal::Cons(Box::new(ConsList::Cons(
-            ListVal::Number(make_dem_number(key as isize)),
+            ListVal::Number(make_mod_number(key as isize)),
             ListVal::Cons(Box::new(ConsList::Cons(
                 unknown_param,
                 ListVal::Cons(Box::new(ConsList::Nil)))))))));
@@ -44,67 +48,96 @@ fn make_start_request(key_str: &str, x0: isize, x1: isize, x2: isize, x3: isize)
 
     let key = usize::from_str_radix(key_str, 10).unwrap();
 
-    // assuming unknown list as nil for now
-    let unknown_param = ListVal::Cons(Box::new(ConsList::Nil));
-
     let request = ConsList::Cons(
-        ListVal::Number(make_dem_number(3)),
+        ListVal::Number(make_mod_number(3)),
+
         ListVal::Cons(Box::new(ConsList::Cons(
-            ListVal::Number(make_dem_number(key as isize)),
+            ListVal::Number(make_mod_number(key as isize)),
+
             ListVal::Cons(Box::new(ConsList::Cons(
-                unknown_param,
+
+                ListVal::Cons(Box::new(ConsList::Cons(
+                    ListVal::Number(make_mod_number(x0)),
+                    ListVal::Cons(Box::new(ConsList::Cons(
+                        ListVal::Number(make_mod_number(x1)),
+                        ListVal::Cons(Box::new(ConsList::Cons(
+                            ListVal::Number(make_mod_number(x2)),
+                            ListVal::Cons(Box::new(ConsList::Cons(
+                                ListVal::Number(make_mod_number(x3)),
+                                ListVal::Cons(Box::new(ConsList::Nil)))))))))))))),
+
                 ListVal::Cons(Box::new(ConsList::Nil)))))))));
 
     request.modulate_to_string()
 }
 
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+
+fn make_empty_commands_request(key_str: &str) -> String {
+    // COMMANDS
+    // (4, playerKey, commands)
+    // commands is the list of issued commands.
+    // Each item has format (type, shipId, ...), where ... denotes command-specific parameters.
+    // THIS IMPLEMENTATION SENDS nil AS COMMANDS LIST
+    let key = usize::from_str_radix(key_str, 10).unwrap();
+
+    // assuming unknown list as nil for now
+    let request = ConsList::Cons(
+        ListVal::Number(make_mod_number(4)),
+
+        ListVal::Cons(Box::new(ConsList::Cons(
+            ListVal::Number(make_mod_number(key as isize)),
+
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Cons(Box::new(ConsList::Nil)),
+                ListVal::Cons(Box::new(ConsList::Nil)))))))));
+
+    request.modulate_to_string()
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
 
     let server_url = &args[1];
     let player_key = &args[2];
 
-    println!("ServerUrl: {}; PlayerKey: {}", server_url, player_key);
+    let intercom = Intercom::new(server_url.clone(), player_key.clone());
+    let mut runtime = Runtime::new().unwrap();
+    
+    let join_request = make_join_request(player_key);
+    println!("Sending JOIN command: {}", &join_request);
+    let join_response = intercom.send(join_request.clone(), &mut runtime).unwrap();
+    println!("JOIN command response: {}", &join_response);
 
-    let client = Client::new();
-    let req = Request::builder()
-        .method(Method::POST)
-        .uri(server_url)
-        .body(Body::from(format!("{}", player_key)))?;
+    let start_request = make_join_request(player_key);
+    println!("Sending START command: {}", &join_request);
+    let start_response = intercom.send(start_request.clone(), &mut runtime).unwrap();
+    println!("START command response: {}", &start_response);
 
-    match client.request(req).await {
-        Ok(mut res) => {
-            match res.status() {
-                StatusCode::OK => {
-                    print!("Server response: ");
-                    while let Some(chunk) = res.body_mut().data().await {
-                        match chunk {
-                            Ok(content) => println!("{:?}", content),
-                            Err(why) => println!("error reading body: {:?}", why)
-                        }
-                    }
-                },
-                _ => {
-                    println!("Unexpected server response:");
-                    println!("HTTP code: {}", res.status());
-                    print!("Response body: ");
-                    while let Some(chunk) = res.body_mut().data().await {
-                        match chunk {
-                            Ok(content) => println!("{:?}", content),
-                            Err(why) => println!("error reading body: {:?}", why)
-                        }
-                    }
-                    process::exit(2);
-                }
-            }
-        },
-        Err(err) => {
-            println!("Unexpected server response:\n{}", err);
-            process::exit(1);
-        }
-    }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn join_request() {
+        assert_eq!(make_join_request("1"), "11011000101101100001110000");
+        /* this is NOT our API key, but something similiar */
+        assert_eq!(make_join_request("7551862922895789501"),
+                   "11011000101101111111111111111100110100011001101100110110101000100011111101001011000110110111101110000");
+    }
+
+    #[test]
+    fn start_request() {
+        assert_eq!(make_start_request("1", 0, 0, 0, 0), "1101100011110110000111110101101011010110100000");
+    }
+
+    #[test]
+    fn empty_commands_request() {
+        assert_eq!(make_empty_commands_request("1"), "11011001001101100001110000");
+    }
+
 }

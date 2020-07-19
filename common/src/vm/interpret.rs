@@ -562,6 +562,12 @@ impl Interpreter {
                         break;
                     },
 
+                    // MultipleDraw0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0))) => {
+                        ast_node = self.eval_multiple_draw(arg, env)?;
+                        break;
+                    },
+
                     // Send0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
                         ast_node = self.eval_send(arg, env)?;
@@ -1338,6 +1344,11 @@ impl Interpreter {
         Ok(Picture { points: points_vec, })
     }
 
+    fn eval_multiple_draw(&self, _points_list_of_lists: AstNode, _env: &Env) -> Result<AstNode, Error> {
+
+        unimplemented!()
+    }
+
     fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
         let args_ops = send_args.render();
         let send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
@@ -1593,6 +1604,7 @@ pub enum EvalFunAbs {
     IfZero1 { cond: EncodedNumber, },
     IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
     Draw0,
+    MultipleDraw0,
     Send0,
     Mod0,
     Dem0,
@@ -1657,7 +1669,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Chkb)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::MultipleDraw)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0)),
             Op::Const(Const::Fun(Fun::If0)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)),
             Op::Const(Const::Fun(Fun::Interact)) =>
@@ -1841,6 +1853,8 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Draw))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::MultipleDraw))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Send))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0)) =>

@@ -267,24 +267,13 @@ impl Interpreter {
         Ok(env)
     }
 
-    fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
-        let Equality { left, right } = eq;
-
-        let left_ast = self.build_tree(left)?;
-        // let left = self.eval(left_ast, env)?;
-
-        let right_ast = self.build_tree(right)?;
-        // let right = self.eval(right_ast, env)?;
-
+    fn eval_equality(&self, Equality { left, right }: Equality, env: &mut Env) -> Result<(), Error> {
         env.add_equality(
-            left_ast,
-            right_ast,
-            // self.build_tree(left.clone())?,
-            // self.build_tree(right.clone())?,
+            self.build_tree(left)?,
+            self.build_tree(right)?,
         );
 
         Ok(())
-        // Ok(Equality { left, right, })
     }
 
     pub fn lookup_env(&self, env: &Env, key: Ops) -> Result<Option<Ops>, Error> {

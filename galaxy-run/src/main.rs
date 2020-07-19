@@ -1,10 +1,10 @@
 use std::{
     io,
-    sync::mpsc,
 };
 
 use futures::{
     channel::mpsc::unbounded,
+    StreamExt,
 };
 
 use rustyline::{
@@ -13,11 +13,15 @@ use rustyline::{
 };
 
 use common::{
-    vm::interpret::Interpreter,
+    vm::interpret::{
+        Interpreter,
+        OuterRequest,
+    },
     proto::{
         galaxy,
         Session,
     },
+    send::Intercom,
 };
 
 #[derive(Debug)]
@@ -29,13 +33,36 @@ enum Error {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
 
-    let (outer_tx, outer_rx) = unbounded();
+    let (outer_tx, mut outer_rx) = unbounded();
 
     let mut session = Session::with_interpreter(
         galaxy(),
         Interpreter::with_outer_channel(outer_tx),
     ).map_err(Error::Proto)?;
 
+    tokio::spawn(async move {
+        let intercom = Intercom::proxy();
+
+        while let Some(request) = outer_rx.next().await {
+            match request {
+                OuterRequest::ProxySend { modulated_req, modulated_rep, } =>
+                    match intercom.async_send(modulated_req).await {
+                        Ok(response) => {
+                            if let Err(..) = modulated_rep.send(response) {
+                                println!("interpreter has gone, quitting");
+                                break;
+                            }
+                        },
+                        Err(error) => {
+                            println!("intercom send failed: {:?}, quitting", error);
+                            break;
+                        },
+                    },
+            }
+        }
+
+        println!("intercom task termination");
+    });
 
     let mut rl = Editor::<()>::new();
     match rl.load_history("./galaxy-run-history.txt") {

@@ -534,6 +534,12 @@ impl Interpreter {
                         break;
                     },
 
+                    // Send0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
+                        ast_node = self.eval_send(arg, env)?;
+                        break;
+                    },
+
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         match env.lookup_ast(&fun_ast_node) {
@@ -1344,6 +1350,11 @@ impl Interpreter {
         Ok(Picture { points: points_vec, })
     }
 
+    fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+
+        unimplemented!()
+    }
+
     fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env) -> Result<Ops, Error> {
         let mut script = Ops(Vec::with_capacity(ops.len() + on_script.0.len()));
         script.0.clear();
@@ -1417,6 +1428,7 @@ pub enum EvalFunAbs {
     IfZero1 { cond: EncodedNumber, },
     IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
     Draw0,
+    Send0,
 }
 
 impl EvalOp {
@@ -1443,7 +1455,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Dem)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)),
             Op::Const(Const::Fun(Fun::Send)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)),
             Op::Const(Const::Fun(Fun::Neg)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Neg0)),
             Op::Const(Const::Fun(Fun::S)) =>
@@ -1659,6 +1671,8 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Draw))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Send))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)) =>

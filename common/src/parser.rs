@@ -85,6 +85,8 @@ impl AsmParser {
             Rule::true_ => Fun::True,
             Rule::false_ => Fun::False,
 
+            Rule::send_ => Fun::Send,
+
             Rule::draw_ => Fun::Draw,
             Rule::multipledraw_ => Fun::MultipleDraw,
 

@@ -86,7 +86,7 @@ enum Obstacle {
     Circle(geom::CircleExt),
     Line(geom::LineExt),
     Rect(geom::RectExt),
-    RectInTime{ rect: geom::RectExt, tm: u64 },
+    RectInTime{ rect: geom::RectExt, tm: f64 },
     //Tri([f64;6])
 }
 
@@ -95,33 +95,58 @@ enum Obstacle {
 pub struct DotsXYT {
     sx: f64,
     sy: f64,
-    tm: u64,
-    limit: u64,
+    mx: f64,
+    my: f64,
+    dtm: f64,
     dots: Vec<Obstacle>,
 }
 impl DotsXYT {
-    pub fn new(data: Data, sx: f64, sy: f64) -> DotsXYT {
+    pub fn new(data: &Data, sx: f64, sy: f64) -> DotsXYT {
+        let mx = sx.abs()*2.0;
+        let my = sy.abs()*2.0;
         let mut v = Vec::new();
-        for (y,row) in data.data.iter().enumerate() {
-            for (x,r) in row.iter().enumerate() {
-                if *r > 0 {
-                    v.push(Obstacle::RectInTime{
-                        rect: geom::RectExt::new([sx + x as f64,sy - (y+1) as f64,1.0,1.0]).unwrap(),
-                        tm: 0,
-                    });
-                }
+        for coo in &data.data {
+            if (coo[0]<0.0)||(coo[1]<0.0)||(coo[0]>mx)||(coo[1]>my) {
+                println!("Point out-of-range: {:?}",coo);
             }
+            v.push(Obstacle::RectInTime{
+                rect: geom::RectExt::new([sx + coo[0],sy - coo[1]-1.0,1.0,1.0]).unwrap(),
+                tm: 1.0,
+            });
         }
         DotsXYT {
             sx: sx,
             sy: sy,
-            tm: 0,
-            limit: 5,
+            mx: mx,
+            my: my,
+            dtm: 0.34,
             dots: v,
         }
     }
-    pub fn next(&mut self, data: Data) {
-
+    pub fn next(&mut self, data: &Data) {
+        self.dots = self.dots.iter().filter_map(|obs| {
+            let mut obs = obs.clone();
+            let mut drop = false;
+            if let Obstacle::RectInTime{ tm, .. } = &mut obs {
+                *tm -= self.dtm;
+                if *tm <= 0.0 {
+                    drop = true;
+                }
+            }
+            match drop {
+                true => None,
+                false => Some(obs),
+            }
+        }).collect();
+        for coo in &data.data {
+            if (coo[0]<0.0)||(coo[1]<0.0)||(coo[0]>self.mx)||(coo[1]>self.my) {
+                println!("Point out-of-range: {:?}",coo);
+            }
+            self.dots.push(Obstacle::RectInTime{
+                rect: geom::RectExt::new([self.sx + coo[0],self.sy - coo[1]-1.0,1.0,1.0]).unwrap(),
+                tm: 1.0,
+            });
+        }
     }
 }
 
@@ -129,7 +154,7 @@ pub struct Obstacles {
     tree: RTree<Obstacle>,
 }
 impl Obstacles {
-    pub fn rect_mask(data: Data, sx: f64, sy: f64) -> Obstacles {
+    /*pub fn rect_mask(data: Data, sx: f64, sy: f64) -> Obstacles {
         let mut v = Vec::new();
         for (y,row) in data.data.iter().enumerate() {
             for (x,r) in row.iter().enumerate() {
@@ -141,7 +166,7 @@ impl Obstacles {
         Obstacles {
             tree: RTree::bulk_load(v),
         }
-    }
+    }*/
     pub fn empty() -> Obstacles {
         Obstacles {
             tree: RTree::bulk_load(Vec::new()),
@@ -284,7 +309,7 @@ impl DrawControl for Obstacle {
         match self {
             Obstacle::Line(ln) => Line::new([0.0,0.0,1.0,1.0],0.03).draw_from_to(ln.from(),ln.to(),&c.draw_state,c.transform,&mut glc.gl),
             Obstacle::Rect(r) => Rectangle::new([0.0,0.0,1.0,0.7]).border(rectangle::Border{ color: [0.0,0.0,1.0,1.0], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
-            Obstacle::RectInTime{ rect: r, tm: _t } => Rectangle::new([0.0,0.0,1.0,0.7]).border(rectangle::Border{ color: [0.0,0.0,1.0,1.0], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
+            Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([0.0,0.0,1.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [0.0,0.0,1.0,1.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
             Obstacle::Circle(cq) => Ellipse::new([0.0,0.0,1.0,0.7]).border(ellipse::Border{ color: [0.0,0.0,1.0,1.0], radius: 0.03 }).draw(cq.mbr(),&c.draw_state,c.transform,&mut glc.gl),
         }
     }
@@ -299,18 +324,18 @@ impl Map {
         cursor.cursor = [x.floor(),y.floor()];
         cursor
     }
-    pub fn next_data(&mut self, data: Data) {
-        self.dots.next(data)
+    pub fn next_data(&mut self, data: &Data) {
+        self.dots.next(&data)
     }
-    pub fn new(data: Data) -> Map {
+    pub fn new(data: &Data) -> Map {
         let mut dx = data.width();
         let mut dy = data.height();
         
         if dx < 80.0 { dx = 80.0; }
         if dy < 60.0 { dy = 60.0; }
 
-        let size_x = (-dx/2.0,dx - dx/2.0);
-        let size_y = (-dy/2.0,dy - dy/2.0);
+        let size_x = ( -dx/2.0, dx/2.0);
+        let size_y = ( -dy/2.0, dy/2.0);
         
         let mut rng = rand::thread_rng();
         //let start = [-24.0,19.0];

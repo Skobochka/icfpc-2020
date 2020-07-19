@@ -33,7 +33,7 @@ pub struct MainScreen {
     drawn: DrawContext,
 }
 impl MainScreen {
-    pub fn new(data: Data, c: &DrawContext) -> MainScreen {
+    pub fn new(data: &Data, c: &DrawContext) -> MainScreen {
         let mut scr = MainScreen {
             menu: Panel::new(0.0,0.0,270.0,180.0)
                 .with_color([0.75,0.0,0.0,1.0])

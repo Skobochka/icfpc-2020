@@ -35,23 +35,33 @@ use main_screen::MainScreen;
 
 
 pub struct Data {
-    pub(crate) data: Vec<Vec<u8>>,
+    pub(crate) data: Vec<[f64; 2]>,
 }
 impl Data {
     pub fn width(&self) -> f64 { 80.0 }
     pub fn height(&self) -> f64 { 60.0 }
 }
 
+fn tmp_data(dx: f64, dy: f64) -> Data {
+     Data {
+        data: {
+            let mut v = Vec::new();
+            let szx = 20;
+            let szy = 10;
+            for x in 0 .. szx {
+                for y in 0 .. szy {
+                    if (x==0)||(x==szx-1)||(y==0)||(y==szy-1)||((x%szy) == (szy-y-1)) {
+                        v.push([x as f64 + dx, y as f64 + dy]);
+                    }
+                }
+            }
+            v
+        },
+    }
+}
+
 fn main() {
-    let data = Data {
-        data: vec![
-            vec![1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            vec![1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-            vec![1,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0,1,0,1],
-            vec![1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-            vec![1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        ],
-    };
+    let data = Data{ data: vec![] };
     
     let opengl = OpenGL::V3_2;
 
@@ -88,7 +98,7 @@ fn main() {
         size: (1280.0,800.0),
         glc: glc,
         cursor: Cursor::new(0.0,0.0),
-        main: MainScreen::new(data,&cntx),
+        main: MainScreen::new(&data,&cntx),
     };
     app.cursor(cursor);
     
@@ -127,6 +137,10 @@ fn main() {
                     };
                     app.cursor(cursor);
                     {
+                        let coo = app.main.scene.get_cursor().cursor;
+                        let data = tmp_data(coo[0],coo[1]);
+                        app.main.scene.map.next_data(&data);
+                        
                         // TODO some click processing
                         // app.main.scene.get_cursor() - cursor in galaxy coordinates
 
@@ -177,7 +191,7 @@ pub struct Scene {
     chess: Vec<[f64; 4]>,
 }
 impl Scene {
-    fn new(data: Data, l: f64, t: f64, w: f64, h: f64, c: &DrawContext) -> Scene {
+    fn new(data: &Data, l: f64, t: f64, w: f64, h: f64, c: &DrawContext) -> Scene {
         let screen_w = c.screen_size.0;
         let screen_h = c.screen_size.1;
         let rm = f64::min(w,h);

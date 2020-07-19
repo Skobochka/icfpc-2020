@@ -1,9 +1,11 @@
 [package]
 name = "galaxy-run"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["skobochka"]
 edition = "2018"
 
 [dependencies]
 common = { path = "../common" }
 rustyline = "^6.2"
+futures = "^0.3"
+tokio = { version = "^0.2", features = ["macros"] }

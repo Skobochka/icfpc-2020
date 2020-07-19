@@ -20,32 +20,51 @@ pub trait Modulable<T=Self> {
     fn modulate_to_string(&self) -> String;
 }
 
-impl Modulable for EncodedNumber {
-    fn demodulate_from_string(input: &str) -> Result<EncodedNumber, Error> {
-        fn demodulate_number(from: &str) -> Result<isize, Error> {
-            match from.find('0') {
-                Some(width) => {
-                    isize::from_str_radix(&from[width..], 2).map_err(|err| Error::ParseIntError(err))
-                },
-                None => Err(Error::BadWidthCode),
-            }
-        }
-        match &input[0..2] {
-            "01" => Ok(EncodedNumber {
-                number: Number::Positive(PositiveNumber {
-                    value: demodulate_number(&input[2..])? as usize,
-                }),
-                modulation: Modulation::Demodulated,
-            }),
-            "10" => Ok(EncodedNumber {
-                number: Number::Negative(NegativeNumber {
-                    value: -demodulate_number(&input[2..])?,
-                }),
-                modulation: Modulation::Demodulated,
-            }),
-            _ => Err(Error::BadPrefix)
-        }
 
+fn demodulate_number_from_string_helper(input: &str) -> Result<(EncodedNumber, usize), Error> {
+    fn demodulate_number(from: &str) -> Result<(isize, usize), Error> {
+        match from.find('0') {
+            Some(0) => Ok((0, 1)),
+            Some(width) => {
+                isize::from_str_radix(&from[width+1..width*4+width+1], 2)
+                    .map_err(|err| Error::ParseIntError(err))
+                    .map(|num| (num, width * 5 + 1))
+                    },
+            None => Err(Error::BadWidthCode),
+        }
+    }
+
+    match &input[0..2] {
+        "01" => {
+            let (val, consumed) = demodulate_number(&input[2..])?;
+
+            Ok((EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: val as usize,
+                    }),
+                    modulation: Modulation::Demodulated,
+                },
+                consumed + 2))
+        },
+        "10" => {
+            let (val, consumed) = demodulate_number(&input[2..])?;
+
+            Ok((EncodedNumber {
+                    number: Number::Negative(NegativeNumber {
+                        value: -val,
+                    }),
+                    modulation: Modulation::Demodulated,
+                },
+                consumed + 2))
+        },
+        _ => Err(Error::BadPrefix)
+    }
+}
+
+impl Modulable for EncodedNumber {
+
+    fn demodulate_from_string(input: &str) -> Result<EncodedNumber, Error> {
+        demodulate_number_from_string_helper(input).map(|val| val.0)
     }
 
     fn modulate_to_string(&self) -> String {
@@ -94,9 +113,41 @@ pub enum ConsList {
     Cons(ListVal, ListVal),
 }
 
+
+fn demodulate_list_from_string_helper(input: &str) -> Result<(ConsList, usize), Error> {
+    fn demodulate_list_val(from: &str) -> Result<(ListVal, usize), Error> {
+        match &from[0..2] {
+            "00" => Ok((ListVal::Cons(Box::new(ConsList::Nil)), 2)),
+            "01" | "10" => demodulate_number_from_string_helper(from)
+                               .map(|(val, consumed)| (ListVal::Number(val), consumed)),
+            "11" => demodulate_list_from_string_helper(from)
+                               .map(|(val, consumed)| (ListVal::Cons(Box::new(val)), consumed)),
+            _ => unreachable!(),
+        }
+    }
+
+    if &input[0..2] != "11" {
+        return Err(Error::BadPrefix);
+    }
+
+    let from = &input[2..];
+
+    match from {
+        "" => Ok((ConsList::Nil, 2)),
+        _ => {
+            let (left, left_consumed) = demodulate_list_val(&from)?;
+            let (right, right_consumed) = demodulate_list_val(&from[left_consumed..])?;
+
+            Ok((ConsList::Cons(left, right), left_consumed + right_consumed))
+        }
+    }
+}
+
+
+
 impl Modulable for ConsList {
-    fn demodulate_from_string(_from: &str) -> Result<ConsList, Error> {
-        unimplemented!("Not implemented yet")
+    fn demodulate_from_string(input: &str) -> Result<ConsList, Error> {
+        demodulate_list_from_string_helper(input).map(|val| val.0)
     }
 
     fn modulate_to_string(&self) -> String {
@@ -266,5 +317,48 @@ mod tests {
                        }),
                        modulation: Modulation::Demodulated,
                    }));
+    }
+
+    #[test]
+    fn dem_lists() {
+        assert_eq!(ConsList::demodulate_from_string("11"),
+                   Ok(ConsList::Nil));
+        assert_eq!(ConsList::demodulate_from_string("110000"),
+                   Ok(ConsList::Cons(
+                       ListVal::Cons(Box::new(ConsList::Nil)),
+                       ListVal::Cons(Box::new(ConsList::Nil)),
+                     )));
+        assert_eq!(ConsList::demodulate_from_string("110110000101100010"),
+                   Ok(ConsList::Cons(
+                       ListVal::Number(EncodedNumber {
+                           number: Number::Positive(PositiveNumber {
+                               value: 1,
+                           }),
+                           modulation: Modulation::Demodulated,
+                       }),
+                       ListVal::Number(EncodedNumber {
+                           number: Number::Positive(PositiveNumber {
+                               value: 2,
+                           }),
+                           modulation: Modulation::Demodulated,
+                       }),
+                     )));
+        assert_eq!(ConsList::demodulate_from_string("1101100001110110001000"),
+                   Ok(ConsList::Cons(
+                       ListVal::Number(EncodedNumber {
+                           number: Number::Positive(PositiveNumber {
+                               value: 1,
+                           }),
+                           modulation: Modulation::Demodulated,
+                       }),
+                       ListVal::Cons(Box::new(ConsList::Cons(
+                           ListVal::Number(EncodedNumber {
+                               number: Number::Positive(PositiveNumber {
+                                   value: 2,
+                               }),
+                               modulation: Modulation::Demodulated,
+                           }),
+                           ListVal::Cons(Box::new(ConsList::Nil)))))
+                      )));
     }
 }

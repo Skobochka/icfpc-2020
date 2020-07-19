@@ -4,7 +4,7 @@ grid_number_literal = _{ grid_negative_number_literal | grid_positive_number_lit
   grid_negative_number_literal = @{ "-" ~ ASCII_DIGIT+ }
   grid_positive_number_literal = @{ ASCII_DIGIT+ }
 
-variable_name = { ASCII_DIGIT+ }
+variable_name = { "-"? ~ ASCII_DIGIT+ }
 variable = ${ "x" ~ variable_name }
 
 func = _{ named_func | unnamed_func }
@@ -64,7 +64,7 @@ named_func = {
   render_ = { "render" }
 
 // Corresponds to unknown (yet?) function with the number
-func_name = { ASCII_DIGIT+ }
+func_name = {  "-"? ~ ASCII_DIGIT+ }
 unnamed_func = ${ ":" ~ func_name }
 
 equal_sign = @{ "=" }

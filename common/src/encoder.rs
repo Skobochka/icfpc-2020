@@ -132,19 +132,23 @@ fn demodulate_list_from_string_helper(input: &str) -> Result<(ConsList, usize), 
     let from = &input[2..];
 
     match from {
-        "" => Ok((ConsList::Nil, 2)),
+        "" => Ok((ConsList::Nil, 2)),  // 2 is for prefix
         _ => {
             let (left, left_consumed) = demodulate_list_val(&from)?;
             let (right, right_consumed) = demodulate_list_val(&from[left_consumed..])?;
 
-            Ok((ConsList::Cons(left, right), left_consumed + right_consumed))
+            Ok((ConsList::Cons(left, right), left_consumed + right_consumed + 2)) // 2 is for prefix
         }
     }
 }
 
 impl Modulable for ConsList {
     fn demodulate_from_string(input: &str) -> Result<ConsList, Error> {
-        demodulate_list_from_string_helper(input).map(|val| val.0)
+        demodulate_list_from_string_helper(input).map(|val| {
+            let (value, consumed) = val;
+            assert_eq!(consumed, input.len());
+            value
+        })
     }
 
     fn modulate_to_string(&self) -> String {
@@ -624,6 +628,14 @@ mod tests {
     #[test]
     fn dem_lists_pretty_print_regression1() {
         let regression_lst = ConsList::demodulate_from_string("1101100001110101111011110000100000000110110000111110111100001110000001101100001110111001000000001111011100001000011011101000000000110000110000").unwrap();
-        assert_eq!(regression_lst.to_pretty_string(), "(1 . (0 . ((256 1 (448 1 64)) . 0)))");
+        assert_eq!(regression_lst.to_pretty_string(), "(1 0 (256 1 (448 1 64) (16 128) nil) nil)");
+    }
+
+    fn dem_lists_regression2() {
+        let modul1 = "11011000011101100001111101111000010000000011010111101111000100000000011011000011101110010000000011110111000010000110111010000000001111011100110010011011010001101110000100001101110001000000000111101100010111101110000100001101110100000000011111111011000011101011110111000101110011011011111101000010101111011100110001111011010001101110000100001101110001000000011010110111001000000110110000100111111010111110100001010000000111111010110110000111111011000101101101011011111011000100101111010110101101011011000010011010110111001000000110110000100110000000000";
+        let dem1 = ConsList::demodulate_from_string(&modul1);
+        let modul2 = "11011000011101100001111101111000010000000011010111101111000100000000011011000011101110010000000011110111000010000110111010000000001111011100110010011011010001101110000100001101110001000000000111101100001111101110000100001101110100000000011111111011000011101011110111000101111011011011111101000010101111011100110010011011010001101110000100001101110001000000011010110111001000000110110000100110000111111010110110000111111011000101111101011011111011000010101111010110101101011011000010011010110111001000000110110000100110000000000";
+        let dem2 = ConsList::demodulate_from_string(&modul2);
+        assert_ne!(dem1, dem2);
     }
 }

@@ -149,6 +149,10 @@ impl Interpreter {
         }
     }
 
+    pub fn make_prev_variable_ast(&self) -> Ast {
+        Ast::Tree(AstNode::Literal { value: Op::Variable(Variable { name: Number::Negative(NegativeNumber { value: -2, }), }), })
+    }
+
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,

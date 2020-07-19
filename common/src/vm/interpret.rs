@@ -1,4 +1,5 @@
 use std::{
+    rc::Rc,
     sync::mpsc,
     collections::HashMap,
 };
@@ -53,10 +54,10 @@ pub enum OuterRequest {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
     NoAppFunProvided,
-    NoAppArgProvided { fun: AstNode, },
+    NoAppArgProvided { fun: Ops, },
     EvalEmptyTree,
-    AppOnNumber { number: EncodedNumber, arg: AstNode, },
-    AppExpectsNumButFunProvided { fun: EvalFun, },
+    AppOnNumber { number: EncodedNumber, arg: Ops, },
+    AppExpectsNumButFunProvided { fun: Ops, },
     TwoNumbersOpInDifferentModulation { number_a: EncodedNumber, number_b: EncodedNumber, },
     DivisionByZero,
     IsNilAppOnANumber { number: EncodedNumber, },
@@ -64,7 +65,7 @@ pub enum Error {
     DemOnDemodulatedNumber { number: EncodedNumber, },
     ListNotClosed,
     ListCommaWithoutElement,
-    ListSyntaxUnexpectedNode { node: AstNode, },
+    ListSyntaxUnexpectedNode { node: Ops, },
     ListSyntaxSeveralCommas,
     ListSyntaxClosingAfterComma,
     InvalidCoordForDrawArg,
@@ -86,7 +87,7 @@ pub enum Ast {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum AstNode {
     Literal { value: Op, },
-    App { fun: Box<AstNode>, arg: Box<AstNode>, },
+    App { fun: Rc<AstNode>, arg: Rc<AstNode>, },
 }
 
 #[derive(Debug)]
@@ -151,9 +152,9 @@ impl Interpreter {
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,
-            AwaitAppArg { fun: AstNode, },
+            AwaitAppArg { fun: Rc<AstNode>, },
             ListBegin,
-            ListPush { element: AstNode, },
+            ListPush { element: Rc<AstNode>, },
             ListContinue,
             ListContinueComma,
         }
@@ -195,15 +196,15 @@ impl Interpreter {
                     (Some(State::AwaitAppFun), None) =>
                         return Err(Error::NoAppFunProvided),
                     (Some(State::AwaitAppFun), Some(node)) => {
-                        states.push(State::AwaitAppArg { fun: node, });
+                        states.push(State::AwaitAppArg { fun: Rc::new(node), });
                         break;
                     },
                     (Some(State::AwaitAppArg { fun, }), None) =>
-                        return Err(Error::NoAppArgProvided { fun, }),
+                        return Err(Error::NoAppArgProvided { fun: fun.render(), }),
                     (Some(State::AwaitAppArg { fun, }), Some(node)) => {
                         maybe_node = Some(AstNode::App {
-                            fun: Box::new(fun),
-                            arg: Box::new(node),
+                            fun: fun,
+                            arg: Rc::new(node),
                         });
                     },
                     (Some(State::ListBegin), None) =>
@@ -215,7 +216,7 @@ impl Interpreter {
                             value: Op::Const(Const::Fun(Fun::Nil)),
                         }),
                     (Some(State::ListBegin), Some(node)) => {
-                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListPush { element: Rc::new(node), });
                         states.push(State::ListContinue);
                         break;
                     },
@@ -230,7 +231,7 @@ impl Interpreter {
                             value: Op::Const(Const::Fun(Fun::Nil)),
                         }),
                     (Some(State::ListContinue), Some(node)) =>
-                        return Err(Error::ListSyntaxUnexpectedNode { node, }),
+                        return Err(Error::ListSyntaxUnexpectedNode { node: Rc::new(node).render(), }),
                     (Some(State::ListContinueComma), None) =>
                         return Err(Error::ListNotClosed),
                     (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) =>
@@ -238,7 +239,7 @@ impl Interpreter {
                     (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
                         return Err(Error::ListSyntaxClosingAfterComma),
                     (Some(State::ListContinueComma), Some(node)) => {
-                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListPush { element: Rc::new(node), });
                         states.push(State::ListContinue);
                         break;
                     },
@@ -246,11 +247,11 @@ impl Interpreter {
                         unreachable!(),
                     (Some(State::ListPush { element, }), Some(tail)) =>
                         maybe_node = Some(AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
-                                arg: Box::new(element),
+                            fun: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                                arg: element,
                             }),
-                            arg: Box::new(tail),
+                            arg: Rc::new(tail),
                         }),
                 }
             }
@@ -267,30 +268,20 @@ impl Interpreter {
         Ok(env)
     }
 
-    fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
-        let Equality { left, right } = eq;
-
-        let left_ast = self.build_tree(left)?;
-        // let left = self.eval(left_ast, env)?;
-
-        let right_ast = self.build_tree(right)?;
-        // let right = self.eval(right_ast, env)?;
-
+    fn eval_equality(&self, Equality { left, right }: Equality, env: &mut Env) -> Result<(), Error> {
         env.add_equality(
-            left_ast,
-            right_ast,
-            // self.build_tree(left.clone())?,
-            // self.build_tree(right.clone())?,
+            self.build_tree(left)?,
+            self.build_tree(right)?,
         );
 
         Ok(())
-        // Ok(Equality { left, right, })
     }
 
     pub fn lookup_env(&self, env: &Env, key: Ops) -> Result<Option<Ops>, Error> {
         if let Ast::Tree(ast_node) = self.build_tree(key)? {
             if let Some(ast_node) = env.lookup_ast(&ast_node) {
-                return Ok(Some(ast_node.clone().render()))
+                let ast_node = Rc::new(ast_node.clone());
+                return Ok(Some(ast_node.render()))
             }
         }
         Ok(None)
@@ -305,22 +296,24 @@ impl Interpreter {
         }
     }
 
-    fn eval_tree(&self, mut ast_node: AstNode, env: &Env) -> Result<Ops, Error> {
+    fn eval_tree(&self, ast_node: AstNode, env: &Env) -> Result<Ops, Error> {
+        let mut ast_node = Rc::new(ast_node);
+
         enum State {
-            EvalAppFun { arg: AstNode, },
+            EvalAppFun { arg: Rc<AstNode>, },
             EvalAppArgNum { fun: EvalFunNum, },
             EvalAppArgIsNil,
         }
 
         let mut states = vec![];
         loop {
-            let mut eval_op = match ast_node {
+            let mut eval_op = match &*ast_node {
                 AstNode::Literal { value, } =>
-                    EvalOp::new(value),
+                    EvalOp::new(value.clone()),
 
                 AstNode::App { fun, arg, } => {
-                    states.push(State::EvalAppFun { arg: *arg, });
-                    ast_node = *fun;
+                    states.push(State::EvalAppFun { arg: arg.clone(), });
+                    ast_node = fun.clone();
                     continue;
                 },
             };
@@ -330,7 +323,7 @@ impl Interpreter {
                     (None, EvalOp::Abs(top_ast_node)) => {
                         match env.lookup_ast(&top_ast_node) {
                             Some(subst_ast_node) => {
-                                ast_node = subst_ast_node.clone();
+                                ast_node = Rc::new(subst_ast_node.clone());
                                 break;
                             },
                             None =>
@@ -342,7 +335,7 @@ impl Interpreter {
                         return Ok(eval_op.render()),
 
                     (Some(State::EvalAppFun { arg, }), EvalOp::Num { number, }) =>
-                        return Err(Error::AppOnNumber { number, arg, }),
+                        return Err(Error::AppOnNumber { number, arg: arg.render(), }),
 
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgNum(fun))) => {
                         states.push(State::EvalAppArgNum { fun, });
@@ -394,13 +387,13 @@ impl Interpreter {
 
                     // C2 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(x),
-                                arg: Box::new(arg),
+                        ast_node = Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::App {
+                                fun: x,
+                                arg: arg,
                             }),
-                            arg: Box::new(y),
-                        };
+                            arg: y,
+                        });
                         break;
                     },
 
@@ -418,13 +411,13 @@ impl Interpreter {
 
                     // B2 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(x),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(y),
-                                arg: Box::new(arg),
+                        ast_node = Rc::new(AstNode::App {
+                            fun: x,
+                            arg: Rc::new(AstNode::App {
+                                fun: y,
+                                arg: arg,
                             }),
-                        };
+                        });
                         break;
                     },
 
@@ -442,16 +435,16 @@ impl Interpreter {
 
                     // S2 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(x),
-                                arg: Box::new(arg.clone()),
+                        ast_node = Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::App {
+                                fun: x,
+                                arg: arg.clone(),
                             }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(y),
-                                arg: Box::new(arg),
+                            arg: Rc::new(AstNode::App {
+                                fun: y,
+                                arg: arg,
                             }),
-                        };
+                        });
                         break;
                     },
 
@@ -469,37 +462,37 @@ impl Interpreter {
 
                     // Cons2 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(arg),
-                                arg: Box::new(x),
+                        ast_node = Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::App {
+                                fun: arg,
+                                arg: x,
                             }),
-                            arg: Box::new(y),
-                        };
+                            arg: y,
+                        });
                         break;
                     },
 
                     // Car0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Car0))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(arg),
-                            arg: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }),
-                        };
+                        ast_node = Rc::new(AstNode::App {
+                            fun: arg,
+                            arg: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }),
+                        });
                         break;
                     },
 
                     // Cdr0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(arg),
-                            arg: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), }),
-                        };
+                        ast_node = Rc::new(AstNode::App {
+                            fun: arg,
+                            arg: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), }),
+                        });
                         break;
                     },
 
                     // Nil0 on a something
                     (Some(State::EvalAppFun { .. }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
-                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), };
+                        ast_node = Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), });
                         break;
                     },
 
@@ -516,13 +509,13 @@ impl Interpreter {
 
                     // IsNil on a Nil0
                     (Some(State::EvalAppArgIsNil), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
-                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), };
+                        ast_node = Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), });
                         break;
                     },
 
                     // IsNil on another fun
                     (Some(State::EvalAppArgIsNil), EvalOp::Fun(..)) => {
-                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), };
+                        ast_node = Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), });
                         break;
                     },
 
@@ -531,14 +524,14 @@ impl Interpreter {
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
                                 states.push(State::EvalAppArgIsNil);
-                                ast_node = subst_ast_node.clone();
+                                ast_node = Rc::new(subst_ast_node.clone());
                                 break;
                             },
                             None =>
-                                eval_op = EvalOp::Abs(AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
-                                    arg: Box::new(arg_ast_node),
-                                }),
+                                eval_op = EvalOp::Abs(Rc::new(AstNode::App {
+                                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
+                                    arg: arg_ast_node,
+                                })),
                         },
 
                     // IfZero1 on a something
@@ -560,9 +553,9 @@ impl Interpreter {
 
                     // Draw0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0))) => {
-                        ast_node = AstNode::Literal {
+                        ast_node = Rc::new(AstNode::Literal {
                             value: Op::Const(Const::Picture(self.eval_draw(arg, env)?)),
-                        };
+                        });
                         break;
                     },
 
@@ -637,17 +630,17 @@ impl Interpreter {
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         match env.lookup_ast(&fun_ast_node) {
                             Some(subst_ast_node) => {
-                                ast_node = AstNode::App {
-                                    fun: Box::new(subst_ast_node.clone()),
-                                    arg: Box::new(arg_ast_node),
-                                };
+                                ast_node = Rc::new(AstNode::App {
+                                    fun: Rc::new(subst_ast_node.clone()),
+                                    arg: arg_ast_node,
+                                });
                                 break;
                             }
                             None =>
-                                eval_op = EvalOp::Abs(AstNode::App {
-                                    fun: Box::new(fun_ast_node),
-                                    arg: Box::new(arg_ast_node),
-                                }),
+                                eval_op = EvalOp::Abs(Rc::new(AstNode::App {
+                                    fun: fun_ast_node,
+                                    arg: arg_ast_node,
+                                })),
                         },
 
                     // if0 on a number
@@ -1290,14 +1283,14 @@ impl Interpreter {
 
                     // number type argument fun on a fun
                     (Some(State::EvalAppArgNum { .. }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
+                        return Err(Error::AppExpectsNumButFunProvided { fun: EvalOp::Fun(fun).render(), }),
 
                     // fun on abs
                     (Some(State::EvalAppArgNum { fun }), EvalOp::Abs(arg_ast_node)) =>
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
                                 states.push(State::EvalAppArgNum { fun, });
-                                ast_node = subst_ast_node.clone();
+                                ast_node = Rc::new(subst_ast_node.clone());
                                 break;
                             },
                             None => {
@@ -1320,11 +1313,11 @@ impl Interpreter {
                                                         match fun_ops_iter.next() {
                                                             None =>
                                                                 AstNode::App {
-                                                                    fun: Box::new(AstNode::App {
-                                                                        fun: Box::new(AstNode::Literal { value: op_a, }),
-                                                                        arg: Box::new(AstNode::Literal { value: op_b, }),
+                                                                    fun: Rc::new(AstNode::App {
+                                                                        fun: Rc::new(AstNode::Literal { value: op_a, }),
+                                                                        arg: Rc::new(AstNode::Literal { value: op_b, }),
                                                                     }),
-                                                                    arg: Box::new(arg_ast_node),
+                                                                    arg: arg_ast_node,
                                                                 },
                                                             Some(..) =>
                                                                 unreachable!(),
@@ -1333,11 +1326,11 @@ impl Interpreter {
                                         },
                                     Some(op_a) =>
                                         AstNode::App {
-                                            fun: Box::new(AstNode::Literal { value: op_a, }),
-                                            arg: Box::new(arg_ast_node),
+                                            fun: Rc::new(AstNode::Literal { value: op_a, }),
+                                            arg: arg_ast_node,
                                         },
                                 };
-                                eval_op = EvalOp::Abs(ast_node);
+                                eval_op = EvalOp::Abs(Rc::new(ast_node));
                             },
                         },
                 }
@@ -1345,7 +1338,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_draw(&self, points: AstNode, env: &Env) -> Result<Picture, Error> {
+    fn eval_draw(&self, points: Rc<AstNode>, env: &Env) -> Result<Picture, Error> {
         let mut points_vec = Vec::new();
         let mut points_ops = points.render();
         loop {
@@ -1380,7 +1373,7 @@ impl Interpreter {
         Ok(Picture { points: points_vec, })
     }
 
-    fn eval_multiple_draw(&self, points_list_of_lists: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_multiple_draw(&self, points_list_of_lists: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let mut list_ops = points_list_of_lists.render();
 
         let mut output_ops = Ops(vec![]);
@@ -1407,11 +1400,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // we should got at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_send(&self, send_args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let args_ops = send_args.render();
         let send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
         let send_cons_list = match send_list_val {
@@ -1452,11 +1445,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // list_val_to_ops should return at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_render(&self, render_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_render(&self, render_args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let mut render_ops = render_args.render();
 
         let mut pictures = Vec::new();
@@ -1492,10 +1485,10 @@ impl Interpreter {
             return Err(Error::RenderOpIsNotSupportedWithoutOuterChannel);
         };
 
-        Ok(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })
+        Ok(Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }))
     }
 
-    fn eval_mod(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_mod(&self, args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let args_ops = args.render();
         let ops = self.eval_num_list_map(args_ops, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Demodulated, } =>
@@ -1508,11 +1501,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // eval_num_list_map should return at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_dem(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_dem(&self, args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let args_ops = args.render();
         let ops = self.eval_num_list_map(args_ops, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Modulated, } =>
@@ -1525,11 +1518,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // eval_num_list_map should return at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_modem(&self, ast_node: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_modem(&self, ast_node: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let ast_node = self.eval_mod(ast_node, env)?;
         let ast_node = self.eval_dem(ast_node, env)?;
         Ok(ast_node)
@@ -1615,99 +1608,99 @@ impl Interpreter {
         self.eval(tree, env)
     }
 
-    fn eval_interact(&self, protocol: AstNode, state: AstNode, vector: AstNode, _env: &Env) -> Result<AstNode, Error> {
-        Ok(AstNode::App {
-            fun: Box::new(AstNode::App {
-                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), }),
-                arg: Box::new(protocol.clone()),
+    fn eval_interact(&self, protocol: Rc<AstNode>, state: Rc<AstNode>, vector: Rc<AstNode>, _env: &Env) -> Result<Rc<AstNode>, Error> {
+        Ok(Rc::new(AstNode::App {
+            fun: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), }),
+                arg: protocol.clone(),
             }),
-            arg: Box::new(AstNode::App {
-                fun: Box::new(AstNode::App {
-                    fun: Box::new(protocol),
-                    arg: Box::new(state),
+            arg: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::App {
+                    fun: protocol,
+                    arg: state,
                 }),
-                arg: Box::new(vector),
+                arg: vector,
             }),
-        })
+        }))
     }
 
-    fn eval_f38(&self, protocol: AstNode, tuple3: AstNode, _env: &Env) -> Result<AstNode, Error> {
-        Ok(AstNode::App {
-            fun: Box::new(AstNode::App {
-                fun: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                        arg: Box::new(tuple3.clone()),
+    fn eval_f38(&self, protocol: Rc<AstNode>, tuple3: Rc<AstNode>, _env: &Env) -> Result<Rc<AstNode>, Error> {
+        Ok(Rc::new(AstNode::App {
+            fun: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), }),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                        arg: tuple3.clone(),
                     }),
                 }),
-                arg: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
-                        arg: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                                arg: Box::new(AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                    arg: Box::new(tuple3.clone()),
+                arg: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                        arg: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                                arg: Rc::new(AstNode::App {
+                                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                    arg: tuple3.clone(),
                                 }),
                             }),
                         }),
                     }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::MultipleDraw)), }),
-                                arg: Box::new(AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                                    arg: Box::new(AstNode::App {
-                                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                        arg: Box::new(AstNode::App {
-                                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                            arg: Box::new(tuple3.clone()),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::MultipleDraw)), }),
+                                arg: Rc::new(AstNode::App {
+                                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                                    arg: Rc::new(AstNode::App {
+                                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                        arg: Rc::new(AstNode::App {
+                                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                            arg: tuple3.clone(),
                                         }),
                                     }),
                                 }),
                             }),
                         }),
-                        arg: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                        arg: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), }),
                     }),
                 }),
             }),
-            arg: Box::new(AstNode::App {
-                fun: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), }),
-                        arg: Box::new(protocol),
+            arg: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), }),
+                        arg: protocol,
                     }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
-                        arg: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                arg: Box::new(tuple3.clone()),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
+                        arg: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                arg: tuple3.clone(),
                             }),
                         }),
                     }),
                 }),
-                arg: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Send)), }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                        arg: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                arg: Box::new(tuple3),
+                arg: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Send)), }),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                        arg: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                arg: tuple3,
                             }),
                         }),
                     }),
                 }),
             }),
-        })
+        }))
     }
 }
 
@@ -1743,7 +1736,7 @@ fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
 enum EvalOp {
     Num { number: EncodedNumber, },
     Fun(EvalFun),
-    Abs(AstNode),
+    Abs(Rc<AstNode>),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1777,28 +1770,28 @@ pub enum EvalFunFun {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EvalFunAbs {
     True0,
-    True1 { captured: AstNode, },
+    True1 { captured: Rc<AstNode>, },
     False0,
-    False1 { captured: AstNode, },
+    False1 { captured: Rc<AstNode>, },
     I0,
     C0,
-    C1 { x: AstNode, },
-    C2 { x: AstNode, y: AstNode, },
+    C1 { x: Rc<AstNode>, },
+    C2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     B0,
-    B1 { x: AstNode, },
-    B2 { x: AstNode, y: AstNode, },
+    B1 { x: Rc<AstNode>, },
+    B2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     S0,
-    S1 { x: AstNode, },
-    S2 { x: AstNode, y: AstNode, },
+    S1 { x: Rc<AstNode>, },
+    S2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     Cons0,
-    Cons1 { x: AstNode, },
-    Cons2 { x: AstNode, y: AstNode, },
+    Cons1 { x: Rc<AstNode>, },
+    Cons2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     Car0,
     Cdr0,
     Nil0,
     IsNil0,
     IfZero1 { cond: EncodedNumber, },
-    IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
+    IfZero2 { cond: EncodedNumber, true_clause: Rc<AstNode>, },
     Draw0,
     MultipleDraw0,
     Send0,
@@ -1806,10 +1799,10 @@ pub enum EvalFunAbs {
     Dem0,
     Modem0,
     Interact0,
-    Interact1 { protocol: AstNode, },
-    Interact2 { protocol: AstNode, state: AstNode, },
+    Interact1 { protocol: Rc<AstNode>, },
+    Interact2 { protocol: Rc<AstNode>, state: Rc<AstNode>, },
     F38_0,
-    F38_1 { protocol: AstNode, },
+    F38_1 { protocol: Rc<AstNode>, },
     Render0,
 }
 
@@ -1881,9 +1874,9 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unreachable!(), // should be renamed to variable with name "-1"
             Op::Const(Const::Picture(picture)) =>
-                EvalOp::Abs(AstNode::Literal { value: Op::Const(Const::Picture(picture)), }),
+                EvalOp::Abs(Rc::new(AstNode::Literal { value: Op::Const(Const::Picture(picture)), })),
             Op::Variable(var) =>
-                EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
+                EvalOp::Abs(Rc::new(AstNode::Literal { value: Op::Variable(var), })),
             Op::Const(Const::Fun(Fun::Checkerboard)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::F38)) =>
@@ -2127,9 +2120,9 @@ impl EvalOp {
 }
 
 impl AstNode {
-    pub fn render(self) -> Ops {
+    pub fn render(self: Rc<AstNode>) -> Ops {
         enum State {
-            RenderAppFun { arg: AstNode, },
+            RenderAppFun { arg: Rc<AstNode>, },
             RenderAppArg,
         }
 
@@ -2137,13 +2130,13 @@ impl AstNode {
         let mut ast_node = self;
         let mut stack = vec![];
         loop {
-            match ast_node {
+            match &*ast_node {
                 AstNode::Literal { value, } =>
-                    ops.push(value),
+                    ops.push(value.clone()),
                 AstNode::App { fun, arg, } => {
                     ops.push(Op::App);
-                    stack.push(State::RenderAppFun { arg: *arg, });
-                    ast_node = *fun;
+                    stack.push(State::RenderAppFun { arg: arg.clone(), });
+                    ast_node = fun.clone();
                     continue;
                 },
             }

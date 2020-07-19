@@ -177,7 +177,24 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
     }
 }
 
-
+/*fn ops2asm(ops: &Ops) -> String {
+    let mut s = String::new();
+    for op in ops.0.iter() {
+        match op {
+            Op::App => s += "ap",
+            Op::Const(Const::Picture(..)) => s += "[pic]",
+            Op::Const(Const::Fun(Fun::Cons)) => s += "cons",
+            Op::Const(Const::EncodedNumber(EncodedNumber { number: Number::Positive(PositiveNumber { value: v }), .. })) => s += &v.to_string(),
+            Op::Const(Const::EncodedNumber(EncodedNumber { number: Number::Negative(NegativeNumber { value: v }), .. })) => s += &v.to_string(),
+            Op::Variable(Variable{ name: Number::Positive(PositiveNumber { value: v }) }) => s += &v.to_string(),
+            Op::Variable(Variable{ name: Number::Negative(NegativeNumber { value: v }) }) => s += &v.to_string(),
+            Op::Syntax(Syntax::LeftParen) => s += "(",
+            Op::Syntax(Syntax::Comma) => s += ",",
+            Op::Syntax(Syntax::RightParen) => s += ")",
+        }
+    }
+    s
+}*/
 
 fn main() {
     let (picture_tx,picture_rx) = std::sync::mpsc::channel();

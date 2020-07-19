@@ -12,10 +12,10 @@ func = _{ named_func | unnamed_func }
 ap_func = { "ap" }
 
 named_func = {
-    inc_ | dec_ | add_ | mul_ | div_ | neg_ | pwr2_
+    draw_ | multipledraw_ | checkerboard_
+  | inc_ | dec_ | add_ | mul_ | div_ | neg_ | pwr2_
   | mod_ | dem_ | send_
   | cons_ | car_ | cdr_ | nil_ | isnil_ | vec_
-  | draw_ | multipledraw_ | checkerboard_
   | modem_ | interact_ | f38_ | statelessdraw_
   | s_ | c_ | b_ | i_ | if0_
   | true_ | false_ | eq_ | lt_

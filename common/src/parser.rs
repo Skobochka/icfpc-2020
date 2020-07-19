@@ -52,8 +52,7 @@ impl AsmParser {
                 modulation: Modulation::Demodulated,
             },
             _ => {
-                println!("parse_number() fail {:?}", number.as_rule());
-                unreachable!()
+                unimplemented!("parse_number() fail {:?}", number.as_rule())
             }
         }
     }
@@ -86,11 +85,13 @@ impl AsmParser {
             Rule::true_ => Fun::True,
             Rule::false_ => Fun::False,
 
+            Rule::draw_ => Fun::Draw,
+            Rule::multipledraw_ => Fun::MultipleDraw,
+
             Rule::galaxy_ => Fun::Galaxy,
 
             _ => {
-                println!("parse_func() fail {:?}", func.as_rule());
-                unreachable!()
+                unimplemented!("parse_func() {:?}", func.as_rule());
             }
         }
     }
@@ -116,8 +117,7 @@ impl AsmParser {
             Rule::grid_positive_number_literal | Rule::grid_negative_number_literal =>
                 Op::Const(Const::EncodedNumber(self.parse_number(expr))),
             _ => {
-                println!("parse_expr() fail {:?}", expr.as_rule());
-                unreachable!()
+                unimplemented!("parse_expr() fail {:?}", expr.as_rule());
             }
         }
     }
@@ -475,6 +475,64 @@ mod tests {
     fn regression_nospace() {
         let parser = AsmParser::new();
         assert!(parser.parse_script("cc = ss").is_err());
+    }
+
+    #[test]
+    fn parse_draw() {
+        let parser = AsmParser::new();
+        assert_eq!(parser.parse_expression("ap draw ap ap cons ap ap cons 1 1 nil"),
+                   Ok(Ops(vec![
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::Draw)),
+                          Op::App,
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::Cons)),
+                          Op::App,
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::Cons)),
+                          Op::Const(Const::EncodedNumber(EncodedNumber {
+                              number: Number::Positive(PositiveNumber {
+                                  value: 1,
+                              }),
+                              modulation: Modulation::Demodulated,
+                           })),
+                          Op::Const(Const::EncodedNumber(EncodedNumber {
+                              number: Number::Positive(PositiveNumber {
+                                  value: 1,
+                              }),
+                              modulation: Modulation::Demodulated,
+                          })),
+                          Op::Const(Const::Fun(Fun::Nil)),
+                       ])));
+    }
+
+    #[test]
+    fn parse_multipledraw() {
+        let parser = AsmParser::new();
+        assert_eq!(parser.parse_expression("ap multipledraw ap ap cons ap ap cons 1 1 nil"),
+                   Ok(Ops(vec![
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::MultipleDraw)),
+                          Op::App,
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::Cons)),
+                          Op::App,
+                          Op::App,
+                          Op::Const(Const::Fun(Fun::Cons)),
+                          Op::Const(Const::EncodedNumber(EncodedNumber {
+                              number: Number::Positive(PositiveNumber {
+                                  value: 1,
+                              }),
+                              modulation: Modulation::Demodulated,
+                           })),
+                          Op::Const(Const::EncodedNumber(EncodedNumber {
+                              number: Number::Positive(PositiveNumber {
+                                  value: 1,
+                              }),
+                              modulation: Modulation::Demodulated,
+                          })),
+                          Op::Const(Const::Fun(Fun::Nil)),
+                       ])));
     }
 
     #[test]

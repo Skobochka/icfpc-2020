@@ -12,7 +12,10 @@ use super::{
             Ops,
             Fun,
             Const,
+            Coord,
             Number,
+            Syntax,
+            Picture,
             Variable,
             Modulation,
             EncodedNumber,
@@ -42,8 +45,11 @@ mod cdr;
 mod nil;
 mod is_nil;
 mod if_zero;
+mod list;
+mod draw;
 mod env;
 mod various;
+mod encoder;
 
 #[test]
 fn ast_tree_basic() {

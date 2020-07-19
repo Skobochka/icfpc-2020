@@ -16,12 +16,32 @@ pub enum Op {
     Const(Const), // constants
     Variable(Variable), // variables
     App, // function application
+    Syntax(Syntax), // various syntax
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Syntax {
+    LeftParen, // left parenthesis (list construction syntax)
+    Comma, // comma (list construction syntax)
+    RightParen, // right parenthesis (list construction syntax)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Const {
     EncodedNumber(EncodedNumber),
     Fun(Fun), // predefined functions from spec
+    Picture(Picture), // an image drawing script
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Picture {
+    pub points: Vec<Coord>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Coord {
+    pub x: EncodedNumber,
+    pub y: EncodedNumber,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -77,9 +97,6 @@ pub enum Fun {
     Cdr, // cdr / tail
     Nil, // nil / empty list
     IsNil, // is nil (is empty list)
-    LeftParen, // left parenthesis (list construction syntax)
-    Comma, // comma (list construction syntax)
-    RightParen, // right parenthesis (list construction syntax)
     Vec, // vector (alias for cons)
     Draw, // draw (communication with display)
     Chkb, // checkerboard
@@ -88,6 +105,7 @@ pub enum Fun {
     Interact, // interact
     Modem, // ap dem ap mod x0
     Galaxy, // 42
+    Checkerboard,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

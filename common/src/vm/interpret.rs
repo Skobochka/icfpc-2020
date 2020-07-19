@@ -1,12 +1,26 @@
-use std::collections::HashMap;
+use std::{
+    sync::mpsc,
+    collections::HashMap,
+};
+
+use futures::{
+    channel::mpsc::UnboundedSender,
+};
 
 use super::{
+    super::encoder::{
+        self,
+        Modulable,
+    },
     super::code::{
         Op,
         Ops,
         Fun,
         Const,
+        Coord,
         Number,
+        Syntax,
+        Picture,
         Variable,
         Modulation,
         EncodedNumber,
@@ -22,8 +36,16 @@ use super::{
 mod tests;
 
 pub struct Interpreter {
-
+    outer_channel: Option<UnboundedSender<OuterRequest>>,
 }
+
+pub enum OuterRequest {
+    ProxySend {
+        modulated_req: String,
+        modulated_rep: mpsc::Sender<String>,
+    },
+}
+
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
@@ -37,6 +59,18 @@ pub enum Error {
     IsNilAppOnANumber { number: EncodedNumber, },
     ModOnModulatedNumber { number: EncodedNumber, },
     DemOnDemodulatedNumber { number: EncodedNumber, },
+    ListNotClosed,
+    ListCommaWithoutElement,
+    ListSyntaxUnexpectedNode { node: AstNode, },
+    ListSyntaxSeveralCommas,
+    ListSyntaxClosingAfterComma,
+    InvalidCoordForDrawArg,
+    ExpectedOnlyTwoCoordsPointForDrawArg,
+    ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
+    ConsListDem(encoder::Error),
+    SendOpIsNotSupportedWithoutOuterChannel,
+    OuterChannelIsClosed,
+    DemodulatedNumberInList { number: EncodedNumber, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -102,7 +136,13 @@ impl Env {
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
+            outer_channel: None,
+        }
+    }
 
+    pub fn with_outer_channel(outer_channel: UnboundedSender<OuterRequest>) -> Interpreter {
+        Interpreter {
+            outer_channel: Some(outer_channel),
         }
     }
 
@@ -110,6 +150,10 @@ impl Interpreter {
         enum State {
             AwaitAppFun,
             AwaitAppArg { fun: AstNode, },
+            ListBegin,
+            ListPush { element: AstNode, },
+            ListContinue,
+            ListContinueComma,
         }
 
         let mut states = vec![];
@@ -126,8 +170,13 @@ impl Interpreter {
                             }),
                         }),
                     }),
+                Some(Op::Syntax(Syntax::LeftParen)) => {
+                    states.push(State::ListBegin);
+                    continue;
+                },
                 Some(value @ Op::Const(..)) |
-                Some(value @ Op::Variable(..)) =>
+                Some(value @ Op::Variable(..)) |
+                Some(value @ Op::Syntax(..)) =>
                     Some(AstNode::Literal { value: value, }),
                 Some(Op::App) => {
                     states.push(State::AwaitAppFun);
@@ -155,6 +204,52 @@ impl Interpreter {
                             arg: Box::new(node),
                         });
                     },
+                    (Some(State::ListBegin), None) =>
+                        return Err(Error::ListNotClosed),
+                    (Some(State::ListBegin), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) =>
+                        return Err(Error::ListCommaWithoutElement),
+                    (Some(State::ListBegin), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
+                        maybe_node = Some(AstNode::Literal {
+                            value: Op::Const(Const::Fun(Fun::Nil)),
+                        }),
+                    (Some(State::ListBegin), Some(node)) => {
+                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListContinue);
+                        break;
+                    },
+                    (Some(State::ListContinue), None) =>
+                        return Err(Error::ListNotClosed),
+                    (Some(State::ListContinue), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) => {
+                        states.push(State::ListContinueComma);
+                        break;
+                    },
+                    (Some(State::ListContinue), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
+                        maybe_node = Some(AstNode::Literal {
+                            value: Op::Const(Const::Fun(Fun::Nil)),
+                        }),
+                    (Some(State::ListContinue), Some(node)) =>
+                        return Err(Error::ListSyntaxUnexpectedNode { node, }),
+                    (Some(State::ListContinueComma), None) =>
+                        return Err(Error::ListNotClosed),
+                    (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) =>
+                        return Err(Error::ListSyntaxSeveralCommas),
+                    (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
+                        return Err(Error::ListSyntaxClosingAfterComma),
+                    (Some(State::ListContinueComma), Some(node)) => {
+                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListContinue);
+                        break;
+                    },
+                    (Some(State::ListPush { .. }), None) =>
+                        unreachable!(),
+                    (Some(State::ListPush { element, }), Some(tail)) =>
+                        maybe_node = Some(AstNode::App {
+                            fun: Box::new(AstNode::App {
+                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                                arg: Box::new(element),
+                            }),
+                            arg: Box::new(tail),
+                        }),
                 }
             }
         }
@@ -458,6 +553,20 @@ impl Interpreter {
                             EncodedNumber { .. } =>
                                 false_clause,
                         };
+                        break;
+                    },
+
+                    // Draw0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0))) => {
+                        ast_node = AstNode::Literal {
+                            value: Op::Const(Const::Picture(self.eval_draw(arg, env)?)),
+                        };
+                        break;
+                    },
+
+                    // Send0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
+                        ast_node = self.eval_send(arg, env)?;
                         break;
                     },
 
@@ -1230,6 +1339,164 @@ impl Interpreter {
             }
         }
     }
+
+    fn eval_draw(&self, points: AstNode, env: &Env) -> Result<Picture, Error> {
+        let mut points_vec = Vec::new();
+        let mut points_ops = points.render();
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &points_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let mut coord_vec = Vec::with_capacity(2);
+            let mut coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env)?;
+            loop {
+                let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &coord_ops, env)?;
+                if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                    break;
+                }
+
+                let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env)?;
+                match (ops.0.len(), ops.0.pop()) {
+                    (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                        coord_vec.push(number),
+                    _ =>
+                        return Err(Error::InvalidCoordForDrawArg),
+                }
+
+                coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env)?;
+            }
+            if coord_vec.len() != 2 {
+                return Err(Error::ExpectedOnlyTwoCoordsPointForDrawArg);
+            }
+            points_vec.push(Coord {
+                y: coord_vec.pop().unwrap(),
+                x: coord_vec.pop().unwrap(),
+            });
+
+            points_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &points_ops, env)?;
+        }
+        Ok(Picture { points: points_vec, })
+    }
+
+    fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let args_ops = send_args.render();
+        let send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
+        let send_cons_list = match send_list_val {
+            encoder::ListVal::Number(number) =>
+                return Err(Error::ExpectedListArgForSendButGotNumber { number, }),
+            encoder::ListVal::Cons(value) =>
+                *value,
+        };
+        let send_mod = send_cons_list.modulate_to_string();
+
+        // perform send
+        let recv_mod = if let Some(outer_channel) = &self.outer_channel {
+            let (tx, rx) = mpsc::channel();
+
+            let outer_send_result = outer_channel.unbounded_send(OuterRequest::ProxySend {
+                modulated_req: send_mod,
+                modulated_rep: tx,
+            });
+            if let Err(..) = outer_send_result {
+                return Err(Error::OuterChannelIsClosed);
+            }
+
+            match rx.recv() {
+                Ok(response) =>
+                    response,
+                Err(..) =>
+                    return Err(Error::OuterChannelIsClosed),
+            }
+        } else {
+            return Err(Error::SendOpIsNotSupportedWithoutOuterChannel);
+        };
+
+        let recv_cons_list = encoder::ConsList::demodulate_from_string(&recv_mod)
+            .map_err(Error::ConsListDem)?;
+        let recv_ops = list_val_to_ops(encoder::ListVal::Cons(Box::new(recv_cons_list)));
+
+        match self.build_tree(recv_ops)? {
+            Ast::Empty =>
+                unreachable!(), // list_val_to_ops should return at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
+    }
+
+    fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ListVal, Error> {
+        match (list_ops.0.len(), list_ops.0.pop()) {
+            (_, None) =>
+                unreachable!(),
+            (1, Some(Op::Const(Const::EncodedNumber(number @ EncodedNumber { modulation: Modulation::Modulated, .. })))) =>
+                return Ok(encoder::ListVal::Number(number)),
+            (1, Some(Op::Const(Const::EncodedNumber(number @ EncodedNumber { modulation: Modulation::Demodulated, .. })))) =>
+                return Err(Error::DemodulatedNumberInList { number, }),
+            (_, Some(last_item)) =>
+                list_ops.0.push(last_item),
+        }
+
+        let mut cons_stack = vec![];
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            let child_list_val = self.eval_ops_to_list_val(ops, env)?;
+            cons_stack.push(child_list_val);
+
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+        }
+
+        let mut cons_list = encoder::ConsList::Nil;
+        while let Some(item) = cons_stack.pop() {
+            cons_list = encoder::ConsList::Cons(
+                item,
+                encoder::ListVal::Cons(Box::new(cons_list)),
+            );
+        }
+        Ok(encoder::ListVal::Cons(Box::new(cons_list)))
+    }
+
+    fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env) -> Result<Ops, Error> {
+        let mut script = Ops(Vec::with_capacity(ops.len() + on_script.0.len()));
+        script.0.clear();
+        script.0.extend(ops.iter().cloned());
+        script.0.extend(on_script.0.iter().cloned());
+        let tree = self.build_tree(script)?;
+        self.eval(tree, env)
+    }
+}
+
+fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
+    let mut ops = Ops(vec![]);
+    loop {
+        match value {
+            encoder::ListVal::Number(number) => {
+                ops.0.push(Op::Const(Const::EncodedNumber(number)));
+                break;
+            },
+            encoder::ListVal::Cons(cons_list) =>
+                match *cons_list {
+                    encoder::ConsList::Nil => {
+                        ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
+                        break;
+                    },
+                    encoder::ConsList::Cons(car, cdr) => {
+                        ops.0.push(Op::App);
+                        ops.0.push(Op::App);
+                        ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
+                        let car_ops = list_val_to_ops(car);
+                        ops.0.extend(car_ops.0);
+                        value = cdr;
+                    },
+                },
+        }
+    }
+    ops
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1294,6 +1561,8 @@ pub enum EvalFunAbs {
     IsNil0,
     IfZero1 { cond: EncodedNumber, },
     IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
+    Draw0,
+    Send0,
 }
 
 impl EvalOp {
@@ -1320,7 +1589,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Dem)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)),
             Op::Const(Const::Fun(Fun::Send)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)),
             Op::Const(Const::Fun(Fun::Neg)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Neg0)),
             Op::Const(Const::Fun(Fun::S)) =>
@@ -1347,16 +1616,10 @@ impl EvalOp {
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0)),
             Op::Const(Const::Fun(Fun::IsNil)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)),
-            Op::Const(Const::Fun(Fun::LeftParen)) =>
-                unimplemented!(),
-            Op::Const(Const::Fun(Fun::Comma)) =>
-                unimplemented!(),
-            Op::Const(Const::Fun(Fun::RightParen)) =>
-                unimplemented!(),
             Op::Const(Const::Fun(Fun::Vec)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0)),
             Op::Const(Const::Fun(Fun::Draw)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)),
             Op::Const(Const::Fun(Fun::Chkb)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::MultipleDraw)) =>
@@ -1369,10 +1632,16 @@ impl EvalOp {
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unreachable!(), // should be renamed to variable with name "-1"
+            Op::Const(Const::Picture(picture)) =>
+                EvalOp::Abs(AstNode::Literal { value: Op::Const(Const::Picture(picture)), }),
             Op::Variable(var) =>
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
+            Op::Const(Const::Fun(Fun::Checkerboard)) =>
+                unimplemented!(),
             Op::App =>
-                unreachable!(),
+                unreachable!(), // should be processed by ast builder
+            Op::Syntax(..) =>
+                unreachable!(), // should be processed by ast builder
         }
     }
 
@@ -1536,12 +1805,14 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
-
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Draw))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Send))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Dem))]),
-
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::If0))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, })) =>

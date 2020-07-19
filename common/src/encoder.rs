@@ -168,6 +168,14 @@ impl Modulable for ConsList {
     }
 }
 
+pub fn is_proper_list(value: &ConsList) -> bool {
+    match value {
+        ConsList::Nil => true,
+        ConsList::Cons(_, ListVal::Cons(tail)) => is_proper_list(tail.as_ref()),
+        _ => false,
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -360,5 +368,74 @@ mod tests {
                            }),
                            ListVal::Cons(Box::new(ConsList::Nil)))))
                       )));
+    }
+
+    #[test]
+    fn is_list() {
+        assert_eq!(is_proper_list(&ConsList::Nil), true);
+        assert_eq!(is_proper_list(&ConsList::Cons(
+                                       ListVal::Cons(Box::new(ConsList::Nil)),
+                                       ListVal::Cons(Box::new(ConsList::Nil)),
+            )), true);
+        assert_eq!(is_proper_list(&ConsList::Cons(
+                                       ListVal::Number(EncodedNumber {
+                                           number: Number::Positive(PositiveNumber {
+                                               value: 2,
+                                           }),
+                                           modulation: Modulation::Demodulated,
+                                       }),
+                                       ListVal::Cons(Box::new(ConsList::Nil)),
+            )), true);
+        assert_eq!(is_proper_list(&ConsList::Cons(
+                                       ListVal::Number(EncodedNumber {
+                                           number: Number::Positive(PositiveNumber {
+                                               value: 2,
+                                           }),
+                                           modulation: Modulation::Demodulated,
+                                       }),
+                                       ListVal::Cons(Box::new(ConsList::Cons(
+                                           ListVal::Number(EncodedNumber {
+                                               number: Number::Positive(PositiveNumber {
+                                                   value: 2,
+                                               }),
+                                               modulation: Modulation::Demodulated,
+                                           }),
+                                           ListVal::Cons(Box::new(ConsList::Nil)))))
+            )), true);
+        assert_eq!(is_proper_list(&ConsList::Cons(
+                                       ListVal::Number(EncodedNumber {
+                                           number: Number::Positive(PositiveNumber {
+                                               value: 2,
+                                           }),
+                                           modulation: Modulation::Demodulated,
+                                       }),
+                                       ListVal::Number(EncodedNumber {
+                                               number: Number::Positive(PositiveNumber {
+                                                   value: 2,
+                                               }),
+                                               modulation: Modulation::Demodulated,
+                                           })
+            )), false);
+        assert_eq!(is_proper_list(&ConsList::Cons(
+                                       ListVal::Number(EncodedNumber {
+                                           number: Number::Positive(PositiveNumber {
+                                               value: 2,
+                                           }),
+                                           modulation: Modulation::Demodulated,
+                                       }),
+                                       ListVal::Cons(Box::new(ConsList::Cons(
+                                           ListVal::Number(EncodedNumber {
+                                               number: Number::Positive(PositiveNumber {
+                                                   value: 2,
+                                               }),
+                                               modulation: Modulation::Demodulated,
+                                           }),
+                                           ListVal::Number(EncodedNumber {
+                                               number: Number::Positive(PositiveNumber {
+                                                   value: 2,
+                                               }),
+                                               modulation: Modulation::Demodulated,
+                                           }))))
+            )), false);
     }
 }

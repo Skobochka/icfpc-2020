@@ -2,11 +2,17 @@ use super::code::{
     EncodedNumber,
     Modulation,
     Number,
+    PositiveNumber,
+    NegativeNumber,
 };
 
+use std::num::ParseIntError;
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
     BadPrefix,
+    BadWidthCode,
+    ParseIntError(ParseIntError),
 }
 
 pub trait Modulable<T=Self> {
@@ -15,24 +21,30 @@ pub trait Modulable<T=Self> {
 }
 
 impl Modulable for EncodedNumber {
-    fn demodulate_from_string(_from: &str) -> Result<EncodedNumber, Error> {
-        unimplemented!("Not implemented yet")
-
-        // match &from[0..1] {
-        //     "01" => Ok(EncodedNumber {
-        //         number: Number::Positive(PositiveNumber {
-        //             value: demodulate_number(&from[2..]) as usize,
-        //         }),
-        //         modulation: Modulation::Demodulated,
-        //     }),
-        //     "10" => Ok(EncodedNumber {
-        //         number: Number::Negative(NegativeNumber {
-        //             value: -demodulate_number(&from[2..]),
-        //         }),
-        //         modulation: Modulation::Demodulated,
-        //     }),
-        //     _ => Err(Error::BadPrefix)
-        // }
+    fn demodulate_from_string(input: &str) -> Result<EncodedNumber, Error> {
+        fn demodulate_number(from: &str) -> Result<isize, Error> {
+            match from.find('0') {
+                Some(width) => {
+                    isize::from_str_radix(&from[width..], 2).map_err(|err| Error::ParseIntError(err))
+                },
+                None => Err(Error::BadWidthCode),
+            }
+        }
+        match &input[0..2] {
+            "01" => Ok(EncodedNumber {
+                number: Number::Positive(PositiveNumber {
+                    value: demodulate_number(&input[2..])? as usize,
+                }),
+                modulation: Modulation::Demodulated,
+            }),
+            "10" => Ok(EncodedNumber {
+                number: Number::Negative(NegativeNumber {
+                    value: -demodulate_number(&input[2..])?,
+                }),
+                modulation: Modulation::Demodulated,
+            }),
+            _ => Err(Error::BadPrefix)
+        }
 
     }
 
@@ -215,5 +227,44 @@ mod tests {
                     }),
                     ListVal::Cons(Box::new(ConsList::Nil)))))
             ).modulate_to_string(), "1101100001110110001000");
+    }
+
+    #[test]
+    fn dem_numbers() {
+        assert_eq!(EncodedNumber::demodulate_from_string("010"),
+                   Ok(EncodedNumber {
+                       number: Number::Positive(PositiveNumber {
+                           value: 0,
+                       }),
+                       modulation: Modulation::Demodulated,
+                   }));
+        assert_eq!(EncodedNumber::demodulate_from_string("01100001"),
+                   Ok(EncodedNumber {
+                       number: Number::Positive(PositiveNumber {
+                           value: 1,
+                       }),
+                       modulation: Modulation::Demodulated,
+                   }));
+        assert_eq!(EncodedNumber::demodulate_from_string("10100001"),
+                   Ok(EncodedNumber {
+                       number: Number::Negative(NegativeNumber {
+                           value: -1,
+                       }),
+                       modulation: Modulation::Demodulated,
+                   }));
+        assert_eq!(EncodedNumber::demodulate_from_string("0111011111111"),
+                   Ok(EncodedNumber {
+                       number: Number::Positive(PositiveNumber {
+                           value: 255,
+                       }),
+                       modulation: Modulation::Demodulated,
+                   }));
+        assert_eq!(EncodedNumber::demodulate_from_string("1011011111111"),
+                   Ok(EncodedNumber {
+                       number: Number::Negative(NegativeNumber {
+                           value: -255,
+                       }),
+                       modulation: Modulation::Demodulated,
+                   }));
     }
 }

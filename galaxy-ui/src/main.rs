@@ -110,6 +110,7 @@ impl Data {
 }
 
 fn asm_to_opt_data(session: &mut Session, asm: &str) -> Option<Data> {
+    //println!("ASM: {}",asm);
     match session.eval_asm(asm) {
         Ok(ops) => Data::from_ops(ops),
         Err(e) => {
@@ -129,7 +130,7 @@ fn main() {
         },
     };
 
-    let init_asm = "ap draw ((1,1),(2,10))";
+    let init_asm = "ap draw ( ap ap vec 1 1 , ap ap vec 2 10 )";
     
     let init_data = match asm_to_opt_data(&mut session, init_asm) {
         Some(data) => data,
@@ -211,7 +212,7 @@ fn main() {
                     app.cursor(cursor);
                     {
                         let coo = app.main.scene.get_cursor().cursor;
-                        let asm = format!("ap draw (({},{}))",coo[0],coo[1]);
+                        let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
                         if let Some(data) = asm_to_opt_data(&mut session, &asm) {
                             app.main.scene.map.next_data(&data);
                         }

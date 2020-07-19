@@ -47,6 +47,7 @@ mod is_nil;
 mod if_zero;
 mod list;
 mod draw;
+mod modem;
 mod env;
 mod various;
 mod encoder;

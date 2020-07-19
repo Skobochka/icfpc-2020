@@ -65,7 +65,6 @@ pub enum Error {
     ListSyntaxSeveralCommas,
     ListSyntaxClosingAfterComma,
     InvalidCoordForDrawArg,
-    ExpectedOnlyTwoCoordsPointForDrawArg,
     ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
     ConsListDem(encoder::Error),
     SendOpIsNotSupportedWithoutOuterChannel,
@@ -84,8 +83,6 @@ pub enum AstNode {
     Literal { value: Op, },
     App { fun: Box<AstNode>, arg: Box<AstNode>, },
 }
-
-// TODO: rewrite rules
 
 #[derive(Debug)]
 pub struct Env {
@@ -564,11 +561,66 @@ impl Interpreter {
                         break;
                     },
 
+                    // MultipleDraw0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0))) => {
+                        ast_node = self.eval_multiple_draw(arg, env)?;
+                        break;
+                    },
+
                     // Send0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
                         ast_node = self.eval_send(arg, env)?;
                         break;
                     },
+
+                    // Mod0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0))) => {
+                        ast_node = self.eval_mod(arg, env)?;
+                        break;
+                    },
+
+                    // Dem0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0))) => {
+                        ast_node = self.eval_dem(arg, env)?;
+                        break;
+                    },
+
+                    // Modem0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0))) => {
+                        ast_node = self.eval_modem(arg, env)?;
+                        break;
+                    },
+
+                    // Interact0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 {
+                            protocol: arg,
+                        })),
+
+                    // Interact1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, }))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 {
+                            protocol, state: arg,
+                        })),
+
+                    // Interact2 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, }))) => {
+                        let vector = arg;
+                        ast_node = self.eval_interact(protocol, state, vector, env)?;
+                        break;
+                    },
+
+                    // F38_0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 {
+                            protocol: arg,
+                        })),
+
+                    // F38_1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, }))) => {
+                        ast_node = self.eval_f38(protocol, arg, env)?;
+                        break;
+                    }
 
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
@@ -666,64 +718,6 @@ impl Interpreter {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value - 1, }),
                                 modulation,
-                            },
-                        },
-
-                    // mod on modulated number is error
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
-                        EvalOp::Num {
-                            number: number @ EncodedNumber {
-                                modulation: Modulation::Modulated,
-                                ..
-                            },
-                        },
-                    ) =>
-                        return Err(Error::ModOnModulatedNumber { number, }),
-
-                    // mod on demodulated number
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
-                        EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Demodulated,
-                            },
-                        },
-                    ) =>
-                        eval_op = EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Modulated,
-                            },
-                        },
-
-                    // dem on demodulated number is error
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
-                        EvalOp::Num {
-                            number: number @ EncodedNumber {
-                                modulation: Modulation::Demodulated,
-                                ..
-                            },
-                        },
-                    ) =>
-                        return Err(Error::DemOnDemodulatedNumber { number, }),
-
-                    // dem on modulated number
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
-                        EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Modulated,
-                            },
-                        },
-                    ) =>
-                        eval_op = EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Demodulated,
                             },
                         },
 
@@ -1349,35 +1343,61 @@ impl Interpreter {
                 break;
             }
 
-            let mut coord_vec = Vec::with_capacity(2);
-            let mut coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env)?;
-            loop {
-                let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &coord_ops, env)?;
-                if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
-                    break;
-                }
+            let coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env)?;
 
-                let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env)?;
-                match (ops.0.len(), ops.0.pop()) {
-                    (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
-                        coord_vec.push(number),
-                    _ =>
-                        return Err(Error::InvalidCoordForDrawArg),
-                }
-
-                coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env)?;
-            }
-            if coord_vec.len() != 2 {
-                return Err(Error::ExpectedOnlyTwoCoordsPointForDrawArg);
-            }
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env)?;
+            let coord_a = match (ops.0.len(), ops.0.pop()) {
+                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                    number,
+                _ =>
+                    return Err(Error::InvalidCoordForDrawArg),
+            };
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env)?;
+            let coord_b = match (ops.0.len(), ops.0.pop()) {
+                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                    number,
+                _ =>
+                    return Err(Error::InvalidCoordForDrawArg),
+            };
             points_vec.push(Coord {
-                y: coord_vec.pop().unwrap(),
-                x: coord_vec.pop().unwrap(),
+                x: coord_a,
+                y: coord_b,
             });
 
             points_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &points_ops, env)?;
         }
         Ok(Picture { points: points_vec, })
+    }
+
+    fn eval_multiple_draw(&self, points_list_of_lists: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let mut list_ops = points_list_of_lists.render();
+
+        let mut output_ops = Ops(vec![]);
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let child_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            output_ops.0.push(Op::App);
+            output_ops.0.push(Op::App);
+            output_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
+            output_ops.0.push(Op::App);
+            output_ops.0.push(Op::Const(Const::Fun(Fun::Draw)));
+            output_ops.0.extend(child_ops.0);
+
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+
+        }
+        output_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
+
+        match self.build_tree(output_ops)? {
+            Ast::Empty =>
+                unreachable!(), // we should got at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
     }
 
     fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
@@ -1425,6 +1445,81 @@ impl Interpreter {
         }
     }
 
+    fn eval_mod(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let args_ops = args.render();
+        let ops = self.eval_num_list_map(args_ops, &|num| match num {
+            EncodedNumber { number, modulation: Modulation::Demodulated, } =>
+                Ok(EncodedNumber { number, modulation: Modulation::Modulated, }),
+            number @ EncodedNumber { modulation: Modulation::Modulated, .. } =>
+                Err(Error::ModOnModulatedNumber { number, }),
+        }, env)?;
+
+        match self.build_tree(ops)? {
+            Ast::Empty =>
+                unreachable!(), // eval_num_list_map should return at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
+    }
+
+    fn eval_dem(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let args_ops = args.render();
+        let ops = self.eval_num_list_map(args_ops, &|num| match num {
+            EncodedNumber { number, modulation: Modulation::Modulated, } =>
+                Ok(EncodedNumber { number, modulation: Modulation::Demodulated, }),
+            number @ EncodedNumber { modulation: Modulation::Demodulated, .. } =>
+                Err(Error::DemOnDemodulatedNumber { number, }),
+        }, env)?;
+
+        match self.build_tree(ops)? {
+            Ast::Empty =>
+                unreachable!(), // eval_num_list_map should return at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
+    }
+
+    fn eval_modem(&self, ast_node: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let ast_node = self.eval_mod(ast_node, env)?;
+        let ast_node = self.eval_dem(ast_node, env)?;
+        Ok(ast_node)
+    }
+
+    fn eval_num_list_map<F>(&self, mut list_ops: Ops, trans: &F, env: &Env) -> Result<Ops, Error>
+    where F: Fn(EncodedNumber) -> Result<EncodedNumber, Error>
+    {
+        match (list_ops.0.len(), list_ops.0.pop()) {
+            (_, None) =>
+                unreachable!(),
+            (1, Some(Op::Const(Const::EncodedNumber(number)))) => {
+                let transformed = trans(number)?;
+                return Ok(Ops(vec![Op::Const(Const::EncodedNumber(transformed))]));
+            },
+            (_, Some(last_item)) =>
+                list_ops.0.push(last_item),
+        }
+
+        let mut trans_ops = Ops(vec![]);
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            let child_ops = self.eval_num_list_map(ops, trans, env)?;
+            trans_ops.0.push(Op::App);
+            trans_ops.0.push(Op::App);
+            trans_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
+            trans_ops.0.extend(child_ops.0);
+
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+        }
+        trans_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
+
+        Ok(trans_ops)
+    }
+
     fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ListVal, Error> {
         match (list_ops.0.len(), list_ops.0.pop()) {
             (_, None) =>
@@ -1469,6 +1564,48 @@ impl Interpreter {
         let tree = self.build_tree(script)?;
         self.eval(tree, env)
     }
+
+    fn eval_interact(&self, protocol: AstNode, state: AstNode, vector: AstNode, _env: &Env) -> Result<AstNode, Error> {
+        Ok(AstNode::App {
+            fun: Box::new(AstNode::App {
+                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), }),
+                arg: Box::new(protocol.clone()),
+            }),
+            arg: Box::new(AstNode::App {
+                fun: Box::new(AstNode::App {
+                    fun: Box::new(protocol),
+                    arg: Box::new(state),
+                }),
+                arg: Box::new(vector),
+            }),
+        })
+    }
+
+    fn eval_f38(&self, _protocol: AstNode, _tuple3: AstNode, _env: &Env) -> Result<AstNode, Error> {
+
+        unimplemented!()
+    }
+
+        // let args_ops = args.render();
+        // let ops = self.eval_num_list_map(args_ops, &|num| match num {
+        //     EncodedNumber { number, modulation: Modulation::Modulated, } =>
+        //         Ok(EncodedNumber { number, modulation: Modulation::Demodulated, }),
+        //     number @ EncodedNumber { modulation: Modulation::Demodulated, .. } =>
+        //         Err(Error::DemOnDemodulatedNumber { number, }),
+        // }, env)?;
+
+        // match self.build_tree(ops)? {
+        //     Ast::Empty =>
+        //         unreachable!(), // eval_num_list_map should return at least nil
+        //     Ast::Tree(ast_node) =>
+        //         Ok(ast_node),
+        // }
+
+// pub enum AstNode {
+//     Literal { value: Op, },
+//     App { fun: Box<AstNode>, arg: Box<AstNode>, },
+// }
+
 }
 
 fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
@@ -1527,8 +1664,6 @@ pub enum EvalFunNum {
     Lt0,
     Lt1 { captured: EncodedNumber, },
     Neg0,
-    Mod0,
-    Dem0,
     IfZero0,
 }
 
@@ -1562,7 +1697,16 @@ pub enum EvalFunAbs {
     IfZero1 { cond: EncodedNumber, },
     IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
     Draw0,
+    MultipleDraw0,
     Send0,
+    Mod0,
+    Dem0,
+    Modem0,
+    Interact0,
+    Interact1 { protocol: AstNode, },
+    Interact2 { protocol: AstNode, state: AstNode, },
+    F38_0,
+    F38_1 { protocol: AstNode, },
 }
 
 impl EvalOp {
@@ -1585,9 +1729,9 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Lt)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt0)),
             Op::Const(Const::Fun(Fun::Mod)) =>
-                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0)),
             Op::Const(Const::Fun(Fun::Dem)) =>
-                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0)),
             Op::Const(Const::Fun(Fun::Send)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)),
             Op::Const(Const::Fun(Fun::Neg)) =>
@@ -1623,13 +1767,13 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Chkb)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::MultipleDraw)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0)),
             Op::Const(Const::Fun(Fun::If0)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)),
             Op::Const(Const::Fun(Fun::Interact)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0)),
             Op::Const(Const::Fun(Fun::Modem)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0)),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unreachable!(), // should be renamed to variable with name "-1"
             Op::Const(Const::Picture(picture)) =>
@@ -1638,6 +1782,8 @@ impl EvalOp {
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
             Op::Const(Const::Fun(Fun::Checkerboard)) =>
                 unimplemented!(),
+            Op::Const(Const::Fun(Fun::F38)) =>
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0)),
             Op::App =>
                 unreachable!(), // should be processed by ast builder
             Op::Syntax(..) =>
@@ -1807,12 +1953,16 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Draw))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::MultipleDraw))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Send))]),
-            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)) =>
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
-            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)) =>
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Dem))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Modem))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::If0))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, })) =>
@@ -1831,6 +1981,37 @@ impl EvalOp {
                 ops.extend(true_clause.render().0);
                 Ops(ops)
             },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Interact))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Interact)),
+                ];
+                ops.extend(protocol.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Interact)),
+                ];
+                ops.extend(protocol.render().0);
+                ops.extend(state.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::F38))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::F38)),
+                ];
+                ops.extend(protocol.render().0);
+                Ops(ops)
+            },
+
 
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),

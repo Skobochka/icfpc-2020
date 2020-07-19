@@ -106,6 +106,7 @@ pub enum Fun {
     Modem, // ap dem ap mod x0
     Galaxy, // 42
     Checkerboard,
+    F38, // needed for interact
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -117,6 +118,44 @@ pub struct Variable {
 pub struct Equality {
     pub left: Ops,
     pub right: Ops,
+}
+
+pub fn make_dem_number(x: isize) -> EncodedNumber {
+    if x < 0 {
+        EncodedNumber {
+            number: Number::Negative(NegativeNumber {
+                value: x,
+            }),
+            modulation: Modulation::Demodulated,
+        }
+    }
+    else {
+        EncodedNumber {
+            number: Number::Positive(PositiveNumber {
+                value: x as usize,
+            }),
+            modulation: Modulation::Demodulated,
+        }
+    }
+}
+
+pub fn make_mod_number(x: isize) -> EncodedNumber {
+    if x < 0 {
+        EncodedNumber {
+            number: Number::Negative(NegativeNumber {
+                value: x,
+            }),
+            modulation: Modulation::Modulated,
+        }
+    }
+    else {
+        EncodedNumber {
+            number: Number::Positive(PositiveNumber {
+                value: x as usize,
+            }),
+            modulation: Modulation::Modulated,
+        }
+    }
 }
 
 #[cfg(test)]

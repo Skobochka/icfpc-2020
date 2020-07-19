@@ -10,7 +10,6 @@ use tokio::{self,runtime::Runtime};
 pub struct Intercom {
     client: Client<HttpsConnector<HttpConnector>>,
     server: String,
-    player: String,
 }
 
 #[derive(Debug)]
@@ -24,13 +23,12 @@ pub enum Error {
 
 impl Intercom {
     pub fn proxy() -> Intercom {
-        Intercom::new("https://icfpc2020-api.testkontur.ru".to_string(),"75f6b337427e482e9308fbe7940031c0".to_string())
+        Intercom::new("https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=75f6b337427e482e9308fbe7940031c0".to_string())
     }
-    pub fn new(server_url: String, player_key: String) -> Intercom {
+    pub fn new(server_url: String) -> Intercom {
         Intercom {
             client: Client::builder().build::<_, hyper::Body>(HttpsConnector::new()),
             server: server_url,
-            player: player_key,
         }
     }
     pub fn send(&self, data: String, runtime: &mut Runtime) -> Result<String,Error> {
@@ -39,7 +37,7 @@ impl Intercom {
     pub async fn async_send(&self, data: String) -> Result<String,Error> {
         let req = Request::builder()
             .method(Method::POST)
-            .uri(format!("{}/aliens/send?apiKey={}",self.server,self.player))
+            .uri(&self.server)
             .body(Body::from(data)).map_err(|e|Error::Request(format!("{:?}",e)))?;
         match self.client.request(req).await {
             Ok(res) => {

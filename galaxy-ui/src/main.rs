@@ -102,7 +102,9 @@ impl Data {
                     };
                     v.push([x as f64, y as f64]);
                 }
-                dts.push(Data{ data: v });
+                if v.len() > 0 {
+                    dts.push(Data{ data: v });
+                }
             }
         }
         dts
@@ -133,7 +135,6 @@ fn main() {
         },
     };
 
-    //let init_asm = "ap draw ( ap ap vec 1 1 , ap ap vec 2 10 )";g
     let init_asm = "ap render ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";    
     asm(&mut session, init_asm);
     
@@ -176,11 +177,6 @@ fn main() {
     };
     app.cursor(cursor);
 
-    //let asm = "ap car ap cdr ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
-    
-
-    
-    
     let mut t = std::time::Instant::now();
     while let Some(e) = events.next(&mut window) {
        //println!("[{:?}] {:.3} {:?}",start.elapsed(),app.rotation,e);
@@ -198,7 +194,9 @@ fn main() {
 
                 if let Ok(pics) = picture_rx.try_recv() {
                     let datas = Data::from_pics(pics);
+                    println!("got {} pictures",datas.len());
                     for data in datas {
+                        //println!("{:?}",data);
                         app.main.scene.map.next_data(&data);
                     }
                 }
@@ -379,10 +377,10 @@ impl DrawControl for Scene {
         let tr = math::multiply(DrawContext::reverse(c.transform),self.transform);
 
         // Draws chess background
-        let t = c.transform.trans(self.left,self.top).scale(self.width,self.height);      
+        /*let t = c.transform.trans(self.left,self.top).scale(self.width,self.height);      
         for r in &self.chess {
             rectangle([1.0, 1.0, 0.0, 0.05], *r, t, &mut glc.gl);
-        }
+        }*/
 
         // Draws scale-rect in the center on the map 
         /*

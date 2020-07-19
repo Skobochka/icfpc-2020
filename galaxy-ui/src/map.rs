@@ -120,7 +120,7 @@ impl DotsXYT {
             sy: sy,
             mx: mx,
             my: my,
-            dtm: 0.11,
+            dtm: 0.25,
             dots: v,
         }
     }
@@ -140,11 +140,11 @@ impl DotsXYT {
             }
         }).collect();
         for coo in &data.data {
-            if (coo[0]<0.0)||(coo[1]<0.0)||(coo[0]>self.mx)||(coo[1]>self.my) {
+            if (coo[0]<self.sx)||(coo[1]<self.sy)||(coo[0]>self.mx)||(coo[1]>self.my) {
                 println!("Point out-of-range: {:?}",coo);
             }
             self.dots.push(Obstacle::RectInTime{
-                rect: geom::RectExt::new([self.sx + coo[0],self.sy - coo[1]-1.0,1.0,1.0]).unwrap(),
+                rect: geom::RectExt::new([coo[0],-coo[1],1.0,1.0]).unwrap(),
                 tm: 1.0,
             });
         }
@@ -320,8 +320,9 @@ impl Map {
     pub fn get_cursor(&self, mut cursor: Cursor) -> Cursor {
         let mut x = cursor.cursor[0];
         let mut y = cursor.cursor[1];
-        x -= self.size.size_x.0;
-        y = self.size.size_y.1 - y;
+        //x -= self.size.size_x.0;
+        //y = self.size.size_y.1 - y;
+        y = -y;
         cursor.cursor = [x.floor(),y.floor()];
         cursor
     }
@@ -344,7 +345,7 @@ impl Map {
         let mut t = std::time::Instant::now();
         let obs = Obstacles::empty();
 
-        let dots = DotsXYT::new(data,size_x.0,size_y.1);
+        let dots = DotsXYT::new(data,size_x.0,size_y.0);
         
         
         let mut map = Map {

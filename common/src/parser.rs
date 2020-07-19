@@ -66,6 +66,7 @@ impl AsmParser {
             Rule::div_ => Fun::Div,
             Rule::eq_ => Fun::Eq,
             Rule::lt_ => Fun::Lt,
+            Rule::pwr2_ => Fun::Pwr2,
 
             Rule::vec_ => Fun::Vec,
             Rule::cons_ => Fun::Cons,
@@ -77,6 +78,7 @@ impl AsmParser {
             Rule::neg_ => Fun::Neg,
             Rule::mod_ => Fun::Mod,
             Rule::dem_ => Fun::Dem,
+            Rule::modem_ => Fun::Modem,
 
             Rule::s_ => Fun::S,
             Rule::c_ => Fun::C,
@@ -89,7 +91,9 @@ impl AsmParser {
 
             Rule::draw_ => Fun::Draw,
             Rule::multipledraw_ => Fun::MultipleDraw,
+            Rule::checkerboard_ => Fun::Checkerboard,
 
+            Rule::interact_ => Fun::Interact,
             Rule::galaxy_ => Fun::Galaxy,
 
             _ => {

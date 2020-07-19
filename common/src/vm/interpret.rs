@@ -1631,6 +1631,8 @@ impl EvalOp {
                 EvalOp::Abs(AstNode::Literal { value: Op::Const(Const::Picture(picture)), }),
             Op::Variable(var) =>
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
+            Op::Const(Const::Fun(Fun::Checkerboard)) =>
+                unimplemented!(),
             Op::App =>
                 unreachable!(), // should be processed by ast builder
             Op::Syntax(..) =>

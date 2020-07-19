@@ -105,6 +105,7 @@ pub enum Fun {
     Interact, // interact
     Modem, // ap dem ap mod x0
     Galaxy, // 42
+    Checkerboard,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

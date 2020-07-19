@@ -1,11 +1,11 @@
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Vec2 {
-    pub x: isize;
-    pub y: isize;
+    pub x: isize,
+    pub y: isize,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum GameStage : u8 {
+pub enum GameStage {
     NotStarted = 0,
     Started = 1,
     Finished = 2,
@@ -27,15 +27,15 @@ pub struct StaticGameInfo {
     x4_raw: String,
 }
 
-pub struct ShipsAndCommands {
-    // TODO:
-}
+// pub struct ShipsAndCommands {
+//     // TODO:
+// }
 
-pub struct GameState {
-    gameTick: usize,
-    x1: String, //unknown
-    shipsAndCommands: //
-}
+// pub struct GameState {
+//     gameTick: usize,
+//     x1: String, //unknown
+//     shipsAndCommands: //
+// }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct GameResponse {

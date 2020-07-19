@@ -57,7 +57,7 @@ pub enum Error {
     NoAppArgProvided { fun: Ops, },
     EvalEmptyTree,
     AppOnNumber { number: EncodedNumber, arg: Ops, },
-    AppExpectsNumButFunProvided { fun: EvalFun, },
+    AppExpectsNumButFunProvided { fun: Ops, },
     TwoNumbersOpInDifferentModulation { number_a: EncodedNumber, number_b: EncodedNumber, },
     DivisionByZero,
     IsNilAppOnANumber { number: EncodedNumber, },
@@ -1283,7 +1283,7 @@ impl Interpreter {
 
                     // number type argument fun on a fun
                     (Some(State::EvalAppArgNum { .. }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
+                        return Err(Error::AppExpectsNumButFunProvided { fun: EvalOp::Fun(fun).render(), }),
 
                     // fun on abs
                     (Some(State::EvalAppArgNum { fun }), EvalOp::Abs(arg_ast_node)) =>

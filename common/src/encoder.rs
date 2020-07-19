@@ -200,7 +200,10 @@ impl PrettyPrintable for ConsList {
                 => format!("({} . {})", l.to_pretty_string(), r.as_ref().to_pretty_string()),
             ConsList::Cons(ListVal::Cons(l), ListVal::Cons(r)) if !is_list
                 => format!("({} . {})", l.as_ref().to_pretty_string(), r.as_ref().to_pretty_string()),
-            ConsList::Cons(_, _) => format!("({})", print_proper_list(self).trim()),
+            ConsList::Cons(ListVal::Cons(l), ListVal::Number(r)) if !is_list
+                => format!("({} . {})", l.as_ref().to_pretty_string(), r.to_pretty_string()),
+            ConsList::Cons(_, _) if is_list => format!("({})", print_proper_list(self).trim()),
+            ConsList::Cons(a, b)  => unreachable!("FAIL\nA {:?}\nB: {:?}",a ,b),
         }
     }
 }
@@ -616,5 +619,11 @@ mod tests {
                     }),
                     modulation: Modulation::Demodulated,
                 }))))).to_pretty_string(), "(1 . (2 . 3))");
+    }
+
+    #[test]
+    fn dem_lists_pretty_print_regression1() {
+        let regression_lst = ConsList::demodulate_from_string("1101100001110101111011110000100000000110110000111110111100001110000001101100001110111001000000001111011100001000011011101000000000110000110000").unwrap();
+        assert_eq!(regression_lst.to_pretty_string(), "(1 . (0 . ((256 1 (448 1 64)) . 0)))");
     }
 }

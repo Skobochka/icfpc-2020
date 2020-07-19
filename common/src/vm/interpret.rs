@@ -71,8 +71,10 @@ pub enum Error {
     ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
     ConsListDem(encoder::Error),
     SendOpIsNotSupportedWithoutOuterChannel,
+    RenderOpIsNotSupportedWithoutOuterChannel,
     OuterChannelIsClosed,
     DemodulatedNumberInList { number: EncodedNumber, },
+    RenderItemIsNotAPicture { ops: Ops, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -573,6 +575,12 @@ impl Interpreter {
                     // Send0 on a something
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
                         ast_node = self.eval_send(arg, env)?;
+                        break;
+                    },
+
+                    // Render0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0))) => {
+                        ast_node = self.eval_render(arg, env)?;
                         break;
                     },
 
@@ -1448,6 +1456,45 @@ impl Interpreter {
         }
     }
 
+    fn eval_render(&self, render_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let mut render_ops = render_args.render();
+
+        let mut pictures = Vec::new();
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &render_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &render_ops, env)?;
+            match (ops.0.len(), ops.0.pop()) {
+                (_, None) =>
+                    unreachable!(),
+                (1, Some(Op::Const(Const::Picture(picture)))) => {
+                    pictures.push(picture);
+                },
+                (_, Some(last_item)) => {
+                    ops.0.push(last_item);
+                    return Err(Error::RenderItemIsNotAPicture { ops, });
+                },
+            }
+
+            render_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &render_ops, env)?;
+        }
+
+        // perform send
+        if let Some(outer_channel) = &self.outer_channel {
+            let outer_send_result = outer_channel.unbounded_send(OuterRequest::RenderPictures { pictures, });
+            if let Err(..) = outer_send_result {
+                return Err(Error::OuterChannelIsClosed);
+            }
+        } else {
+            return Err(Error::RenderOpIsNotSupportedWithoutOuterChannel);
+        };
+
+        Ok(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })
+    }
+
     fn eval_mod(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
         let args_ops = args.render();
         let ops = self.eval_num_list_map(args_ops, &|num| match num {
@@ -1763,6 +1810,7 @@ pub enum EvalFunAbs {
     Interact2 { protocol: AstNode, state: AstNode, },
     F38_0,
     F38_1 { protocol: AstNode, },
+    Render0,
 }
 
 impl EvalOp {
@@ -1841,7 +1889,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::F38)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0)),
             Op::Const(Const::Fun(Fun::Render)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0)),
             Op::App =>
                 unreachable!(), // should be processed by ast builder
             Op::Syntax(..) =>
@@ -2069,7 +2117,8 @@ impl EvalOp {
                 ops.extend(protocol.render().0);
                 Ops(ops)
             },
-
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Render))]),
 
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),

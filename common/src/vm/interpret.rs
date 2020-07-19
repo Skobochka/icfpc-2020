@@ -85,8 +85,6 @@ pub enum AstNode {
     App { fun: Box<AstNode>, arg: Box<AstNode>, },
 }
 
-// TODO: rewrite rules
-
 #[derive(Debug)]
 pub struct Env {
     forward: HashMap<AstNode, AstNode>,
@@ -570,6 +568,24 @@ impl Interpreter {
                         break;
                     },
 
+                    // Mod0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0))) => {
+                        ast_node = self.eval_mod(arg, env)?;
+                        break;
+                    },
+
+                    // Dem0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0))) => {
+                        ast_node = self.eval_dem(arg, env)?;
+                        break;
+                    },
+
+                    // Modem0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0))) => {
+                        ast_node = self.eval_modem(arg, env)?;
+                        break;
+                    },
+
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         match env.lookup_ast(&fun_ast_node) {
@@ -666,64 +682,6 @@ impl Interpreter {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value - 1, }),
                                 modulation,
-                            },
-                        },
-
-                    // mod on modulated number is error
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
-                        EvalOp::Num {
-                            number: number @ EncodedNumber {
-                                modulation: Modulation::Modulated,
-                                ..
-                            },
-                        },
-                    ) =>
-                        return Err(Error::ModOnModulatedNumber { number, }),
-
-                    // mod on demodulated number
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Mod0, }),
-                        EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Demodulated,
-                            },
-                        },
-                    ) =>
-                        eval_op = EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Modulated,
-                            },
-                        },
-
-                    // dem on demodulated number is error
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
-                        EvalOp::Num {
-                            number: number @ EncodedNumber {
-                                modulation: Modulation::Demodulated,
-                                ..
-                            },
-                        },
-                    ) =>
-                        return Err(Error::DemOnDemodulatedNumber { number, }),
-
-                    // dem on modulated number
-                    (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dem0, }),
-                        EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Modulated,
-                            },
-                        },
-                    ) =>
-                        eval_op = EvalOp::Num {
-                            number: EncodedNumber {
-                                number,
-                                modulation: Modulation::Demodulated,
                             },
                         },
 
@@ -1425,6 +1383,81 @@ impl Interpreter {
         }
     }
 
+    fn eval_mod(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let args_ops = args.render();
+        let ops = self.eval_num_list_map(args_ops, &|num| match num {
+            EncodedNumber { number, modulation: Modulation::Demodulated, } =>
+                Ok(EncodedNumber { number, modulation: Modulation::Modulated, }),
+            number @ EncodedNumber { modulation: Modulation::Modulated, .. } =>
+                Err(Error::ModOnModulatedNumber { number, }),
+        }, env)?;
+
+        match self.build_tree(ops)? {
+            Ast::Empty =>
+                unreachable!(), // eval_num_list_map should return at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
+    }
+
+    fn eval_dem(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let args_ops = args.render();
+        let ops = self.eval_num_list_map(args_ops, &|num| match num {
+            EncodedNumber { number, modulation: Modulation::Modulated, } =>
+                Ok(EncodedNumber { number, modulation: Modulation::Demodulated, }),
+            number @ EncodedNumber { modulation: Modulation::Demodulated, .. } =>
+                Err(Error::DemOnDemodulatedNumber { number, }),
+        }, env)?;
+
+        match self.build_tree(ops)? {
+            Ast::Empty =>
+                unreachable!(), // eval_num_list_map should return at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
+    }
+
+    fn eval_modem(&self, ast_node: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let ast_node = self.eval_mod(ast_node, env)?;
+        let ast_node = self.eval_dem(ast_node, env)?;
+        Ok(ast_node)
+    }
+
+    fn eval_num_list_map<F>(&self, mut list_ops: Ops, trans: &F, env: &Env) -> Result<Ops, Error>
+    where F: Fn(EncodedNumber) -> Result<EncodedNumber, Error>
+    {
+        match (list_ops.0.len(), list_ops.0.pop()) {
+            (_, None) =>
+                unreachable!(),
+            (1, Some(Op::Const(Const::EncodedNumber(number)))) => {
+                let transformed = trans(number)?;
+                return Ok(Ops(vec![Op::Const(Const::EncodedNumber(transformed))]));
+            },
+            (_, Some(last_item)) =>
+                list_ops.0.push(last_item),
+        }
+
+        let mut trans_ops = Ops(vec![]);
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            let child_ops = self.eval_num_list_map(ops, trans, env)?;
+            trans_ops.0.push(Op::App);
+            trans_ops.0.push(Op::App);
+            trans_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
+            trans_ops.0.extend(child_ops.0);
+
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+        }
+        trans_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
+
+        Ok(trans_ops)
+    }
+
     fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ListVal, Error> {
         match (list_ops.0.len(), list_ops.0.pop()) {
             (_, None) =>
@@ -1527,8 +1560,6 @@ pub enum EvalFunNum {
     Lt0,
     Lt1 { captured: EncodedNumber, },
     Neg0,
-    Mod0,
-    Dem0,
     IfZero0,
 }
 
@@ -1563,6 +1594,9 @@ pub enum EvalFunAbs {
     IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
     Draw0,
     Send0,
+    Mod0,
+    Dem0,
+    Modem0,
 }
 
 impl EvalOp {
@@ -1585,9 +1619,9 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Lt)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt0)),
             Op::Const(Const::Fun(Fun::Mod)) =>
-                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0)),
             Op::Const(Const::Fun(Fun::Dem)) =>
-                EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0)),
             Op::Const(Const::Fun(Fun::Send)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)),
             Op::Const(Const::Fun(Fun::Neg)) =>
@@ -1629,7 +1663,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Interact)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::Modem)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0)),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unreachable!(), // should be renamed to variable with name "-1"
             Op::Const(Const::Picture(picture)) =>
@@ -1809,10 +1843,12 @@ impl EvalOp {
                 Ops(vec![Op::Const(Const::Fun(Fun::Draw))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Send))]),
-            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mod0)) =>
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
-            EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dem0)) =>
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Dem))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Modem))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::If0))]),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, })) =>

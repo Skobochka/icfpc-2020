@@ -24,9 +24,9 @@ impl Session {
     pub fn galaxy() -> Result<Session,Error> {
         Session::new(galaxy())
     }
-    pub fn new(proto: &str) -> Result<Session,Error> {       
+    pub fn new(proto: &str) -> Result<Session,Error> {
         let script = AsmParser.parse_script(proto).map_err(Error::Parse)?;
-        let inter = Interpreter{};
+        let inter = Interpreter::new();
         let env = inter.eval_script(script).map_err(Error::Vm)?;
         Ok(Session {
             inter: inter,

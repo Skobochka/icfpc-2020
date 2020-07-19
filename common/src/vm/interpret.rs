@@ -1,4 +1,11 @@
-use std::collections::HashMap;
+use std::{
+    sync::mpsc,
+    collections::HashMap,
+};
+
+use futures::{
+    channel::mpsc::UnboundedSender,
+};
 
 use super::{
     super::encoder::{
@@ -29,8 +36,16 @@ use super::{
 mod tests;
 
 pub struct Interpreter {
-
+    outer_channel: Option<UnboundedSender<OuterRequest>>,
 }
+
+pub enum OuterRequest {
+    ProxySend {
+        modulated_req: String,
+        modulated_rep: mpsc::Sender<String>,
+    },
+}
+
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
@@ -118,7 +133,7 @@ impl Env {
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
-
+            outer_channel: None,
         }
     }
 

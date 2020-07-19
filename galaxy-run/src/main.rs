@@ -1,12 +1,23 @@
-use std::io;
+use std::{
+    io,
+    sync::mpsc,
+};
+
+use futures::{
+    channel::mpsc::unbounded,
+};
 
 use rustyline::{
     error::ReadlineError,
     Editor,
 };
 
-use common::proto::{
-    Session,
+use common::{
+    vm::interpret::Interpreter,
+    proto::{
+        galaxy,
+        Session,
+    },
 };
 
 #[derive(Debug)]
@@ -15,7 +26,16 @@ enum Error {
     Readline(ReadlineError),
 }
 
-fn main() -> Result<(), Error> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+
+    let (outer_tx, outer_rx) = unbounded();
+
+    let mut session = Session::with_interpreter(
+        galaxy(),
+        Interpreter::with_outer_channel(outer_tx),
+    ).map_err(Error::Proto)?;
+
 
     let mut rl = Editor::<()>::new();
     match rl.load_history("./galaxy-run-history.txt") {
@@ -27,8 +47,6 @@ fn main() -> Result<(), Error> {
         Err(e) =>
             return Err(Error::Readline(e)),
     }
-
-    let mut session = Session::galaxy().map_err(Error::Proto)?;
 
     println!("Enter a command to run\nFor example: ap galaxy 0\nOr 'exit' to exit...\n");
     loop {

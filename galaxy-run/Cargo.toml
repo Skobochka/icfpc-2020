@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 common = { path = "../common" }
 rustyline = "^6.2"
+futures = "^0.3"
+tokio = { version = "^0.2", features = ["macros"] }

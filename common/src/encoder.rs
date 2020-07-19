@@ -71,13 +71,13 @@ impl Modulable for EncodedNumber {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-enum ListVal {
+pub enum ListVal {
     Number(EncodedNumber),
     Cons(Box<ConsList>),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-enum ConsList {
+pub enum ConsList {
     Nil,
     Cons(ListVal, ListVal),
 }

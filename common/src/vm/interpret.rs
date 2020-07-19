@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::{
+    super::encoder,
     super::code::{
         Op,
         Ops,
@@ -1351,8 +1352,45 @@ impl Interpreter {
     }
 
     fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+        let args_ops = send_args.render();
+        let _send_cons_list = self.eval_ops_to_cons_list(args_ops, env)?;
 
         unimplemented!()
+    }
+
+    fn eval_ops_to_cons_list(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ConsList, Error> {
+        let mut cons_list = encoder::ConsList::Nil;
+
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            match (ops.0.len(), ops.0.pop()) {
+                (_, None) =>
+                    unreachable!(),
+                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                    cons_list = encoder::ConsList::Cons(
+                        encoder::ListVal::Number(number),
+                        encoder::ListVal::Cons(Box::new(cons_list)),
+                    ),
+                (_, Some(last_item)) => {
+                    // probably a sublist here
+                    ops.0.push(last_item);
+                    let child_cons_list = self.eval_ops_to_cons_list(ops, env)?;
+                    cons_list = encoder::ConsList::Cons(
+                        encoder::ListVal::Cons(Box::new(child_cons_list)),
+                        encoder::ListVal::Cons(Box::new(cons_list)),
+                    );
+                },
+            }
+
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+        }
+
+        Ok(cons_list)
     }
 
     fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env) -> Result<Ops, Error> {

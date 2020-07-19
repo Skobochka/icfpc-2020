@@ -44,21 +44,21 @@ fn eval_single() {
                     Op::App,
                     Op::Const(Const::Fun(Fun::Draw)),
                     Op::Syntax(Syntax::LeftParen),
-                    Op::Syntax(Syntax::LeftParen),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Vec)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::Comma),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::RightParen),
                     Op::Syntax(Syntax::RightParen),
                 ]),
             ).unwrap(),
@@ -84,37 +84,37 @@ fn eval_single() {
                     Op::App,
                     Op::Const(Const::Fun(Fun::Draw)),
                     Op::Syntax(Syntax::LeftParen),
-                    Op::Syntax(Syntax::LeftParen),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Vec)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::Comma),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 2,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::RightParen),
                     Op::Syntax(Syntax::Comma),
-                    Op::Syntax(Syntax::LeftParen),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Vec)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 3,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::Comma),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::RightParen),
                     Op::Syntax(Syntax::RightParen),
                 ]),
             ).unwrap(),
@@ -175,14 +175,15 @@ fn eval_multi() {
                     Op::Syntax(Syntax::LeftParen),
 
                     Op::Syntax(Syntax::LeftParen),
-                    Op::Syntax(Syntax::LeftParen),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Vec)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::Comma),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
@@ -190,42 +191,41 @@ fn eval_multi() {
                         modulation: Modulation::Demodulated,
                     })),
                     Op::Syntax(Syntax::RightParen),
-                    Op::Syntax(Syntax::RightParen),
 
                     Op::Syntax(Syntax::Comma),
 
                     Op::Syntax(Syntax::LeftParen),
-                    Op::Syntax(Syntax::LeftParen),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Vec)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::Comma),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 2,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::RightParen),
                     Op::Syntax(Syntax::Comma),
-                    Op::Syntax(Syntax::LeftParen),
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Vec)),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 3,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::Comma),
                     Op::Const(Const::EncodedNumber(EncodedNumber {
                         number: Number::Positive(PositiveNumber {
                             value: 1,
                         }),
                         modulation: Modulation::Demodulated,
                     })),
-                    Op::Syntax(Syntax::RightParen),
                     Op::Syntax(Syntax::RightParen),
 
                     Op::Syntax(Syntax::RightParen),

@@ -65,7 +65,6 @@ pub enum Error {
     ListSyntaxSeveralCommas,
     ListSyntaxClosingAfterComma,
     InvalidCoordForDrawArg,
-    ExpectedOnlyTwoCoordsPointForDrawArg,
     ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
     ConsListDem(encoder::Error),
     SendOpIsNotSupportedWithoutOuterChannel,
@@ -1344,30 +1343,25 @@ impl Interpreter {
                 break;
             }
 
-            let mut coord_vec = Vec::with_capacity(2);
-            let mut coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env)?;
-            loop {
-                let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &coord_ops, env)?;
-                if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
-                    break;
-                }
+            let coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env)?;
 
-                let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env)?;
-                match (ops.0.len(), ops.0.pop()) {
-                    (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
-                        coord_vec.push(number),
-                    _ =>
-                        return Err(Error::InvalidCoordForDrawArg),
-                }
-
-                coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env)?;
-            }
-            if coord_vec.len() != 2 {
-                return Err(Error::ExpectedOnlyTwoCoordsPointForDrawArg);
-            }
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env)?;
+            let coord_a = match (ops.0.len(), ops.0.pop()) {
+                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                    number,
+                _ =>
+                    return Err(Error::InvalidCoordForDrawArg),
+            };
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env)?;
+            let coord_b = match (ops.0.len(), ops.0.pop()) {
+                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+                    number,
+                _ =>
+                    return Err(Error::InvalidCoordForDrawArg),
+            };
             points_vec.push(Coord {
-                y: coord_vec.pop().unwrap(),
-                x: coord_vec.pop().unwrap(),
+                x: coord_a,
+                y: coord_b,
             });
 
             points_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &points_ops, env)?;
@@ -1571,7 +1565,7 @@ impl Interpreter {
         self.eval(tree, env)
     }
 
-    fn eval_interact(&self, protocol: AstNode, state: AstNode, vector: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_interact(&self, protocol: AstNode, state: AstNode, vector: AstNode, _env: &Env) -> Result<AstNode, Error> {
         Ok(AstNode::App {
             fun: Box::new(AstNode::App {
                 fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), }),
@@ -1587,7 +1581,7 @@ impl Interpreter {
         })
     }
 
-    fn eval_f38(&self, protocol: AstNode, tuple3: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_f38(&self, _protocol: AstNode, _tuple3: AstNode, _env: &Env) -> Result<AstNode, Error> {
 
         unimplemented!()
     }

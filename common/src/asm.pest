@@ -74,9 +74,13 @@ left_paren = @{ "(" }
 right_paren = @{ ")" }
 comma = @{ "," }
 
+// list_construction = {
+//     left_paren ~ separator* ~ expr_part ~ (separator* ~ comma ~ separator* ~ expr_part)* ~ separator* ~ right_paren
+//   | left_paren ~ separator* ~ right_paren
+// }
+
 list_construction = {
-    left_paren ~ separator* ~ expr_part ~ separator* ~ (separator* ~ comma ~ separator* ~ expr_part )* ~ right_paren
-  | left_paren ~ separator* ~ right_paren
+    left_paren ~ ( separator* ~ expr_part ~ separator* ~ comma? ~ separator*)* ~ separator* ~ right_paren
 }
 
 statement = {
@@ -97,7 +101,7 @@ script = {
   ~ &EOI
 }
 
-expr = { expr_part ~ (separator+ ~ expr_part)* }
+expr = { SOI ~ expr_part ~ (separator+ ~ expr_part)* ~ &EOI}
 
 // TODO: modulated literals support
 // modulated_number_literal = _{ modulated_positive_number_literal | modulated_negative_number_literal }

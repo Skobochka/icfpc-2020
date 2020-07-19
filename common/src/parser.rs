@@ -182,11 +182,8 @@ impl AsmParser {
                 let mut ops = Vec::<Op>::new();
                 for expr_part in expr.into_inner() {
                     match expr_part.as_rule() {
-                        Rule::list_construction => {
-                            for node in expr_part.into_inner() {
-                                ops.push(self.parse_expr(node))
-                            }
-                        },
+                        Rule::list_construction =>
+                            self.parse_list_construction_recursive(expr_part, &mut ops),
                         _ => ops.push(self.parse_expr(expr_part)),
                     }
                 }
@@ -481,6 +478,44 @@ mod tests {
     fn regression_nospace() {
         let parser = AsmParser::new();
         assert!(parser.parse_script("cc = ss").is_err());
+    }
+
+    #[test]
+    fn regression_parens() {
+        let parser = AsmParser::new();
+        assert_eq!(parser.parse_expression("(ap inc 1)"),
+                   Ok(Ops(vec![
+                       Op::Syntax(Syntax::LeftParen),
+                       Op::App,
+                       Op::Const(Const::Fun(Fun::Inc)),
+                       Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                           modulation: Modulation::Demodulated,
+                       })),
+                       Op::Syntax(Syntax::RightParen),
+                       ])));
+        assert_eq!(parser.parse_expression("(1, (2))"),
+                   Ok(Ops(vec![
+                       Op::Syntax(Syntax::LeftParen),
+                       Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                           modulation: Modulation::Demodulated,
+                       })),
+                       Op::Syntax(Syntax::Comma),
+                       Op::Syntax(Syntax::LeftParen),
+                       Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 2,
+                        }),
+                           modulation: Modulation::Demodulated,
+                       })),
+                       Op::Syntax(Syntax::RightParen),
+                       Op::Syntax(Syntax::RightParen),
+                       ])));
     }
 
     #[test]

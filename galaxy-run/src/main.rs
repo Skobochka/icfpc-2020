@@ -25,6 +25,7 @@ use common::{
         Session,
     },
     send::Intercom,
+    code::*,
 };
 
 #[derive(Debug)]
@@ -32,6 +33,59 @@ enum Error {
     Proto(common::proto::Error),
     Readline(ReadlineError),
     QuitTxTerminated,
+}
+
+fn ops2asm(ops: &Ops) -> String {
+    let mut s = String::new();
+    for op in ops.0.iter() {
+        s += " ";
+        match op {
+            Op::App => s += "ap",
+            Op::Const(Const::Picture(..)) => s += "[pic]",
+            Op::Const(Const::Fun(Fun::Cons)) => s += "cons",
+            Op::Const(Const::Fun(Fun::Inc)) => s += "inc",
+            Op::Const(Const::Fun(Fun::Dec)) => s += "dec",
+            Op::Const(Const::Fun(Fun::Sum)) => s += "add",
+            Op::Const(Const::Fun(Fun::Mul)) => s += "mul",
+            Op::Const(Const::Fun(Fun::Div)) => s += "div",
+            Op::Const(Const::Fun(Fun::Eq)) => s += "eq",
+            Op::Const(Const::Fun(Fun::Lt)) => s += "lt",
+            Op::Const(Const::Fun(Fun::Mod)) => s += "mod",
+            Op::Const(Const::Fun(Fun::Dem)) => s += "dem",
+            Op::Const(Const::Fun(Fun::Send)) => s += "send",
+            Op::Const(Const::Fun(Fun::Neg)) => s += "neg",
+            Op::Const(Const::Fun(Fun::S)) => s += "s",
+            Op::Const(Const::Fun(Fun::B)) => s += "b",
+            Op::Const(Const::Fun(Fun::C)) => s += "c",
+            Op::Const(Const::Fun(Fun::True)) => s += "t",
+            Op::Const(Const::Fun(Fun::False)) => s += "f",
+            Op::Const(Const::Fun(Fun::Pwr2)) => s += "pwr",
+            Op::Const(Const::Fun(Fun::I)) => s += "i",
+            Op::Const(Const::Fun(Fun::Car)) => s += "car",
+            Op::Const(Const::Fun(Fun::Cdr)) => s += "cdr",
+            Op::Const(Const::Fun(Fun::Nil)) => s += "nil",
+            Op::Const(Const::Fun(Fun::IsNil)) => s += "isnil",
+            Op::Const(Const::Fun(Fun::Vec)) => s += "vec",
+            Op::Const(Const::Fun(Fun::Draw)) => s += "draw",
+            Op::Const(Const::Fun(Fun::MultipleDraw)) => s += "multipledraw",
+            Op::Const(Const::Fun(Fun::If0)) => s += "if0",
+            Op::Const(Const::Fun(Fun::Interact)) => s += "interact",
+            Op::Const(Const::Fun(Fun::Modem)) => s += "modem",
+            Op::Const(Const::Fun(Fun::Galaxy)) => s += "galaxy",
+            Op::Const(Const::Fun(Fun::Chkb)) |
+            Op::Const(Const::Fun(Fun::Checkerboard)) => s += "checkerboard",
+            Op::Const(Const::Fun(Fun::F38)) => s += "f38",
+            Op::Const(Const::Fun(Fun::Render)) => s += "render",
+            Op::Const(Const::EncodedNumber(EncodedNumber { number: Number::Positive(PositiveNumber { value: v }), .. })) => s += &v.to_string(),
+            Op::Const(Const::EncodedNumber(EncodedNumber { number: Number::Negative(NegativeNumber { value: v }), .. })) => s += &v.to_string(),
+            Op::Variable(Variable{ name: Number::Positive(PositiveNumber { value: v }) }) => s += &v.to_string(),
+            Op::Variable(Variable{ name: Number::Negative(NegativeNumber { value: v }) }) => s += &v.to_string(),
+            Op::Syntax(Syntax::LeftParen) => s += "(",
+            Op::Syntax(Syntax::Comma) => s += ",",
+            Op::Syntax(Syntax::RightParen) => s += ")",
+        }
+    }
+    s
 }
 
 #[tokio::main]
@@ -120,10 +174,8 @@ async fn main() -> Result<(), Error> {
             }
             match session.eval_asm(&asm) {
                 Ok(ops) => {
-                    println!("Ok:");
-                    for op in ops.0 {
-                        println!("   {:?}",op);
-                    }
+                    println!("Ok:");                          
+                    println!("   {}",ops2asm(&ops));
                     println!("");
                 },
                 Err(e) => {

@@ -13,6 +13,7 @@ use common::encoder::{
     ConsList,
     ListVal,
     Modulable,
+    PrettyPrintable,
 };
 
 fn make_join_request(key_str: &str) -> String {
@@ -95,26 +96,41 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server_url = &args[1];
     let player_key = &args[2];
 
+    println!("Starting round with server: {} and player_key: {}", server_url, player_key);
+
     let intercom = Intercom::new(format!("{}/aliens/send", server_url));
     let mut runtime = Runtime::new().unwrap();
-    
+
     let join_request = make_join_request(player_key);
+    let join_request_pretty = ConsList::demodulate_from_string(&join_request).unwrap().to_pretty_string();
+    println!("JOIN request pretty: {}", &join_request_pretty);
     println!("Sending JOIN request: {}", &join_request);
     let join_response = intercom.send(join_request.clone(), &mut runtime).unwrap();
     println!("JOIN response: {}", &join_response);
+    let join_response_pretty = ConsList::demodulate_from_string(&join_response).unwrap().to_pretty_string();
+    println!("JOIN response pretty: {}", &join_response_pretty);
+
 
     let start_request = make_start_request(player_key, 0, 0, 0, 1);
+    let start_request_pretty = ConsList::demodulate_from_string(&start_request).unwrap().to_pretty_string();
+    println!("START request pretty: {}", &start_request_pretty);
     println!("Sending START request: {}", &start_request);
     let start_response = intercom.send(start_request.clone(), &mut runtime).unwrap();
     println!("START response: {}", &start_response);
+    let start_response_pretty = ConsList::demodulate_from_string(&start_response).unwrap().to_pretty_string();
+    println!("START response pretty: {}", &start_response_pretty);
 
     for turn in 0..255 {
-        println!("TURN {}", turn);
+        println!("++++ TURN {}", turn);
 
         let commands_request = make_empty_commands_request(player_key);
-        println!("Sending COMMANDS request: {}", &start_request);
+        let commands_request_pretty = ConsList::demodulate_from_string(&commands_request).unwrap().to_pretty_string();
+        println!("COMMANDS request pretty: {}", &commands_request_pretty);
+        println!("Sending COMMANDS request: {}", &commands_request);
         let commands_response = intercom.send(commands_request.clone(), &mut runtime).unwrap();
         println!("COMMANDS response: {}", &commands_response);
+        let commands_response_pretty = ConsList::demodulate_from_string(&commands_response).unwrap().to_pretty_string();
+        println!("COMMANDS response pretty: {}", &commands_response_pretty);
     }
 
     Ok(())

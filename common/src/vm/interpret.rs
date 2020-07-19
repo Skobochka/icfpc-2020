@@ -1581,31 +1581,84 @@ impl Interpreter {
         })
     }
 
-    fn eval_f38(&self, _protocol: AstNode, _tuple3: AstNode, _env: &Env) -> Result<AstNode, Error> {
-
-        unimplemented!()
+    fn eval_f38(&self, protocol: AstNode, tuple3: AstNode, _env: &Env) -> Result<AstNode, Error> {
+        Ok(AstNode::App {
+            fun: Box::new(AstNode::App {
+                fun: Box::new(AstNode::App {
+                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), }),
+                    arg: Box::new(AstNode::App {
+                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                        arg: Box::new(tuple3.clone()),
+                    }),
+                }),
+                arg: Box::new(AstNode::App {
+                    fun: Box::new(AstNode::App {
+                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                        arg: Box::new(AstNode::App {
+                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
+                            arg: Box::new(AstNode::App {
+                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                                arg: Box::new(AstNode::App {
+                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                    arg: Box::new(tuple3.clone()),
+                                }),
+                            }),
+                        }),
+                    }),
+                    arg: Box::new(AstNode::App {
+                        fun: Box::new(AstNode::App {
+                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                            arg: Box::new(AstNode::App {
+                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::MultipleDraw)), }),
+                                arg: Box::new(AstNode::App {
+                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                                    arg: Box::new(AstNode::App {
+                                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                        arg: Box::new(AstNode::App {
+                                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                            arg: Box::new(tuple3.clone()),
+                                        }),
+                                    }),
+                                }),
+                            }),
+                        }),
+                        arg: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                    }),
+                }),
+            }),
+            arg: Box::new(AstNode::App {
+                fun: Box::new(AstNode::App {
+                    fun: Box::new(AstNode::App {
+                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), }),
+                        arg: Box::new(protocol),
+                    }),
+                    arg: Box::new(AstNode::App {
+                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
+                        arg: Box::new(AstNode::App {
+                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                            arg: Box::new(AstNode::App {
+                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                arg: Box::new(tuple3.clone()),
+                            }),
+                        }),
+                    }),
+                }),
+                arg: Box::new(AstNode::App {
+                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Send)), }),
+                    arg: Box::new(AstNode::App {
+                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                        arg: Box::new(AstNode::App {
+                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                            arg: Box::new(AstNode::App {
+                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                arg: Box::new(tuple3),
+                            }),
+                        }),
+                    }),
+                }),
+            }),
+        })
     }
-
-        // let args_ops = args.render();
-        // let ops = self.eval_num_list_map(args_ops, &|num| match num {
-        //     EncodedNumber { number, modulation: Modulation::Modulated, } =>
-        //         Ok(EncodedNumber { number, modulation: Modulation::Demodulated, }),
-        //     number @ EncodedNumber { modulation: Modulation::Demodulated, .. } =>
-        //         Err(Error::DemOnDemodulatedNumber { number, }),
-        // }, env)?;
-
-        // match self.build_tree(ops)? {
-        //     Ast::Empty =>
-        //         unreachable!(), // eval_num_list_map should return at least nil
-        //     Ast::Tree(ast_node) =>
-        //         Ok(ast_node),
-        // }
-
-// pub enum AstNode {
-//     Literal { value: Op, },
-//     App { fun: Box<AstNode>, arg: Box<AstNode>, },
-// }
-
 }
 
 fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {

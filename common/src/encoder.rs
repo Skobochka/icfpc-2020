@@ -200,7 +200,7 @@ impl PrettyPrintable for ConsList {
                 => format!("({} . {})", l.to_pretty_string(), r.as_ref().to_pretty_string()),
             ConsList::Cons(ListVal::Cons(l), ListVal::Cons(r)) if !is_list
                 => format!("({} . {})", l.as_ref().to_pretty_string(), r.as_ref().to_pretty_string()),
-            ConsList::Cons(_, _) => format!("({})", print_proper_list(self)),
+            ConsList::Cons(_, _) => format!("({})", print_proper_list(self).trim()),
         }
     }
 }
@@ -484,5 +484,137 @@ mod tests {
 
     #[test]
     fn number_pretty_print() {
+        assert_eq!(EncodedNumber {
+            number: Number::Positive(PositiveNumber {
+                value: 1,
+            }),
+            modulation: Modulation::Demodulated,
+        }.to_pretty_string(), "1");
+
+        assert_eq!(EncodedNumber {
+            number: Number::Negative(NegativeNumber {
+                value: -1,
+            }),
+            modulation: Modulation::Demodulated,
+        }.to_pretty_string(), "-1");
+
+        assert_eq!(EncodedNumber {
+            number: Number::Positive(PositiveNumber {
+                value: 1,
+            }),
+            modulation: Modulation::Modulated,
+        }.to_pretty_string(), "[1]");
+
+        assert_eq!(EncodedNumber {
+            number: Number::Negative(NegativeNumber {
+                value: -1,
+            }),
+            modulation: Modulation::Modulated,
+        }.to_pretty_string(), "[-1]");
+    }
+
+    #[test]
+    fn list_pretty_print() {
+        assert_eq!(ConsList::Nil.to_pretty_string(), "nil");
+        assert_eq!(ConsList::Cons(ListVal::Cons(Box::new(ConsList::Nil)),
+                                  ListVal::Cons(Box::new(ConsList::Nil))).to_pretty_string(), "(nil)");
+        assert_eq!(ConsList::Cons(
+            ListVal::Number(EncodedNumber {
+                number: Number::Positive(PositiveNumber {
+                    value: 1,
+                }),
+                modulation: Modulation::Demodulated,
+            }),
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 2,
+                    }),
+                    modulation: Modulation::Demodulated,
+                }),
+                ListVal::Cons(Box::new(ConsList::Cons(
+                    ListVal::Number(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 3,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    }),
+                    ListVal::Cons(Box::new(ConsList::Nil))))))))).to_pretty_string(), "(1 2 3)");
+
+        assert_eq!(ConsList::Cons(
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 1,
+                    }),
+                    modulation: Modulation::Demodulated,
+                }),
+                ListVal::Cons(Box::new(ConsList::Nil))))),
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 2,
+                    }),
+                    modulation: Modulation::Demodulated,
+                }),
+                ListVal::Cons(Box::new(ConsList::Cons(
+                    ListVal::Number(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 3,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    }),
+                    ListVal::Cons(Box::new(ConsList::Nil))))))))).to_pretty_string(), "((1) 2 3)");
+
+        assert_eq!(ConsList::Cons(
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 1,
+                    }),
+                    modulation: Modulation::Demodulated,
+                }),
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 10,
+                    }),
+                    modulation: Modulation::Demodulated,
+                })))),
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 2,
+                    }),
+                    modulation: Modulation::Demodulated,
+                }),
+                ListVal::Cons(Box::new(ConsList::Cons(
+                    ListVal::Number(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 3,
+                        }),
+                        modulation: Modulation::Demodulated,
+                    }),
+                    ListVal::Cons(Box::new(ConsList::Nil))))))))).to_pretty_string(), "((1 . 10) 2 3)");
+        
+        assert_eq!(ConsList::Cons(
+            ListVal::Number(EncodedNumber {
+                number: Number::Positive(PositiveNumber {
+                    value: 1,
+                }),
+                modulation: Modulation::Demodulated,
+            }),
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 2,
+                    }),
+                    modulation: Modulation::Demodulated,
+                }),
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 3,
+                    }),
+                    modulation: Modulation::Demodulated,
+                }))))).to_pretty_string(), "(1 . (2 . 3))");
     }
 }

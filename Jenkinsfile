@@ -24,20 +24,28 @@ pipeline {
       }
     }
 
+    stage('Build Unit Tests') {
+      steps {
+        ansiColor('xterm') {
+          sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 --entrypoint ./build-test.sh icfpc2020-rust-org-image:${env.BUILD_TAG}"
+        }
+      }
+    }
+
+    stage('Run Unit Tests') {
+      steps {
+        ansiColor('xterm') {
+          sh "docker run -t --rm -e RUST_BACKTRACE=1 --entrypoint ./test.sh icfpc2020-rust-org-image:${env.BUILD_TAG}"
+        }
+      }
+    }
+
     // DISABLED until proper server found
     // stage('Smoke Test') {
     //   steps {
     //     sh "docker run -t --rm -e RUST_BACKTRACE=1 icfpc2020-rust-org-image:${env.BUILD_TAG} http://server:12345 2933935384595749692"
     //   }
     // }
-
-    stage('Test') {
-      steps {
-        ansiColor('xterm') {
-          sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 --entrypoint ./test.sh icfpc2020-rust-org-image:${env.BUILD_TAG}"
-        }
-      }
-    }
   }
   post { 
     cleanup {

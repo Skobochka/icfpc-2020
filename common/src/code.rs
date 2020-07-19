@@ -106,6 +106,8 @@ pub enum Fun {
     Modem, // ap dem ap mod x0
     Galaxy, // 42
     Checkerboard,
+    F38, // needed for interact
+    Render, // render list of picture
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

@@ -42,7 +42,7 @@ fn encode() {
                     number: Number::Positive(PositiveNumber {
                         value: 0,
                     }),
-                    modulation: Modulation::Demodulated,
+                    modulation: Modulation::Modulated,
                 })),
                 Op::Syntax(Syntax::RightParen),
             ]),
@@ -51,7 +51,7 @@ fn encode() {
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Number(EncodedNumber {
                 number: Number::Positive(PositiveNumber { value: 0, }),
-                modulation: Modulation::Demodulated,
+                modulation: Modulation::Modulated,
             }),
             ListVal::Cons(Box::new(ConsList::Nil)),
         ))),
@@ -65,14 +65,14 @@ fn encode() {
                     number: Number::Positive(PositiveNumber {
                         value: 1,
                     }),
-                    modulation: Modulation::Demodulated,
+                    modulation: Modulation::Modulated,
                 })),
                 Op::Syntax(Syntax::Comma),
                 Op::Const(Const::EncodedNumber(EncodedNumber {
                     number: Number::Positive(PositiveNumber {
                         value: 1,
                     }),
-                    modulation: Modulation::Demodulated,
+                    modulation: Modulation::Modulated,
                 })),
                 Op::Syntax(Syntax::RightParen),
             ]),
@@ -81,12 +81,12 @@ fn encode() {
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Number(EncodedNumber {
                 number: Number::Positive(PositiveNumber { value: 1, }),
-                modulation: Modulation::Demodulated,
+                modulation: Modulation::Modulated,
             }),
             ListVal::Cons(Box::new(ConsList::Cons(
                 ListVal::Number(EncodedNumber {
                     number: Number::Positive(PositiveNumber { value: 1, }),
-                    modulation: Modulation::Demodulated,
+                    modulation: Modulation::Modulated,
                 }),
                 ListVal::Cons(Box::new(ConsList::Nil)),
             ))),
@@ -101,7 +101,7 @@ fn encode() {
                     number: Number::Positive(PositiveNumber {
                         value: 1,
                     }),
-                    modulation: Modulation::Demodulated,
+                    modulation: Modulation::Modulated,
                 })),
                 Op::Syntax(Syntax::Comma),
                 Op::Syntax(Syntax::LeftParen),
@@ -109,7 +109,7 @@ fn encode() {
                     number: Number::Negative(NegativeNumber {
                         value: -1,
                     }),
-                    modulation: Modulation::Demodulated,
+                    modulation: Modulation::Modulated,
                 })),
                 Op::Syntax(Syntax::RightParen),
                 Op::Syntax(Syntax::RightParen),
@@ -119,13 +119,13 @@ fn encode() {
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Number(EncodedNumber {
                 number: Number::Positive(PositiveNumber { value: 1, }),
-                modulation: Modulation::Demodulated,
+                modulation: Modulation::Modulated,
             }),
             ListVal::Cons(Box::new(ConsList::Cons(
                 ListVal::Cons(Box::new(ConsList::Cons(
                     ListVal::Number(EncodedNumber {
                         number: Number::Negative(NegativeNumber { value: -1, }),
-                        modulation: Modulation::Demodulated,
+                        modulation: Modulation::Modulated,
                     }),
                     ListVal::Cons(Box::new(ConsList::Nil)),
                 ))),
@@ -150,12 +150,12 @@ fn decode() {
     let cons_list = ListVal::Cons(Box::new(ConsList::Cons(
         ListVal::Number(EncodedNumber {
             number: Number::Positive(PositiveNumber { value: 1, }),
-            modulation: Modulation::Demodulated,
+            modulation: Modulation::Modulated,
         }),
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Number(EncodedNumber {
                 number: Number::Positive(PositiveNumber { value: 1, }),
-                modulation: Modulation::Demodulated,
+                modulation: Modulation::Modulated,
             }),
             ListVal::Cons(Box::new(ConsList::Nil)),
         ))),
@@ -168,13 +168,13 @@ fn decode() {
     let cons_list = ListVal::Cons(Box::new(ConsList::Cons(
         ListVal::Number(EncodedNumber {
             number: Number::Positive(PositiveNumber { value: 1, }),
-            modulation: Modulation::Demodulated,
+            modulation: Modulation::Modulated,
         }),
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Cons(Box::new(ConsList::Cons(
                 ListVal::Number(EncodedNumber {
                     number: Number::Negative(NegativeNumber { value: -1, }),
-                    modulation: Modulation::Demodulated,
+                    modulation: Modulation::Modulated,
                 }),
                 ListVal::Cons(Box::new(ConsList::Nil)),
             ))),

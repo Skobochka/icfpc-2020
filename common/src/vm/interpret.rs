@@ -70,6 +70,7 @@ pub enum Error {
     ConsListDem(encoder::Error),
     SendOpIsNotSupportedWithoutOuterChannel,
     OuterChannelIsClosed,
+    DemodulatedNumberInList { number: EncodedNumber, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -1428,8 +1429,10 @@ impl Interpreter {
         match (list_ops.0.len(), list_ops.0.pop()) {
             (_, None) =>
                 unreachable!(),
-            (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
+            (1, Some(Op::Const(Const::EncodedNumber(number @ EncodedNumber { modulation: Modulation::Modulated, .. })))) =>
                 return Ok(encoder::ListVal::Number(number)),
+            (1, Some(Op::Const(Const::EncodedNumber(number @ EncodedNumber { modulation: Modulation::Demodulated, .. })))) =>
+                return Err(Error::DemodulatedNumberInList { number, }),
             (_, Some(last_item)) =>
                 list_ops.0.push(last_item),
         }

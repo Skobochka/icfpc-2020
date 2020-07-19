@@ -1,8 +1,8 @@
 //! Useful traits for manipulating sequences of data stored in `GenericArray`s
 
 use super::*;
-use core::{mem, ptr};
 use core::ops::{Add, Sub};
+use core::{mem, ptr};
 use typenum::operator_aliases::*;
 
 /// Defines some sequence with an associated length and iteration capabilities.
@@ -41,17 +41,15 @@ pub unsafe trait GenericSequence<T>: Sized + IntoIterator {
 
             let (left_array_iter, left_position) = left.iter_position();
 
-            FromIterator::from_iter(
-                left_array_iter
-                    .zip(self.into_iter())
-                    .map(|(l, right_value)| {
+            FromIterator::from_iter(left_array_iter.zip(self.into_iter()).map(
+                |(l, right_value)| {
                         let left_value = ptr::read(l);
 
                         *left_position += 1;
 
                         f(left_value, right_value)
-                    })
-            )
+                },
+            ))
         }
     }
 
@@ -221,7 +219,7 @@ where
 
     fn pop_back(self) -> (Self::Shorter, T) {
         let init_ptr = self.as_ptr();
-        let last_ptr = unsafe { init_ptr.offset(Sub1::<N>::to_usize() as isize) };
+        let last_ptr = unsafe { init_ptr.add(Sub1::<N>::to_usize()) };
 
         let init = unsafe { ptr::read(init_ptr as _) };
         let last = unsafe { ptr::read(last_ptr as _) };
@@ -270,7 +268,7 @@ where
 
     fn split(self) -> (Self::First, Self::Second) {
         let head_ptr = self.as_ptr();
-        let tail_ptr = unsafe { head_ptr.offset(K::to_usize() as isize) };
+        let tail_ptr = unsafe { head_ptr.add(K::to_usize()) };
 
         let head = unsafe { ptr::read(head_ptr as _) };
         let tail = unsafe { ptr::read(tail_ptr as _) };
@@ -312,7 +310,7 @@ where
 
         unsafe {
             ptr::write(output_ptr as *mut _, self);
-            ptr::write(output_ptr.offset(N::to_usize() as isize) as *mut _, rest);
+            ptr::write(output_ptr.add(N::to_usize()) as *mut _, rest);
         }
 
         output

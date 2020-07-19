@@ -1,8 +1,9 @@
 //! `GenericArray` iterator implementation.
 
 use super::{ArrayLength, GenericArray};
-use core::{cmp, ptr, fmt, mem};
+use core::iter::FusedIterator;
 use core::mem::ManuallyDrop;
+use core::{cmp, fmt, mem, ptr};
 
 /// An iterator that moves out of a `GenericArray`
 pub struct GenericArrayIter<T, N: ArrayLength<T>> {
@@ -131,6 +132,34 @@ where
         }
     }
 
+    fn fold<B, F>(mut self, init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        let ret = unsafe {
+            let GenericArrayIter {
+                ref array,
+                ref mut index,
+                index_back,
+            } = self;
+
+            let remaining = &array[*index..index_back];
+
+            remaining.iter().fold(init, |acc, src| {
+                let value = ptr::read(src);
+
+                *index += 1;
+
+                f(acc, value)
+            })
+        };
+
+        // ensure the drop happens here after iteration
+        drop(self);
+
+        ret
+    }
+
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.len();
@@ -176,6 +205,34 @@ where
             None
         }
     }
+
+    fn rfold<B, F>(mut self, init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        let ret = unsafe {
+            let GenericArrayIter {
+                ref array,
+                index,
+                ref mut index_back,
+            } = self;
+
+            let remaining = &array[index..*index_back];
+
+            remaining.iter().rfold(init, |acc, src| {
+                let value = ptr::read(src);
+
+                *index_back -= 1;
+
+                f(acc, value)
+            })
+        };
+
+        // ensure the drop happens here after iteration
+        drop(self);
+
+        ret
+    }
 }
 
 impl<T, N> ExactSizeIterator for GenericArrayIter<T, N>
@@ -187,4 +244,10 @@ where
     }
 }
 
-// TODO: Implement `FusedIterator` and `TrustedLen` when stabilized
+impl<T, N> FusedIterator for GenericArrayIter<T, N>
+where
+    N: ArrayLength<T>,
+{
+}
+
+// TODO: Implement `TrustedLen` when stabilized

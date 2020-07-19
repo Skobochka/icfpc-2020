@@ -52,6 +52,7 @@ pub enum Error {
     InvalidCoordForDrawArg,
     ExpectedOnlyTwoCoordsPointForDrawArg,
     ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
+    ConsListDem(encoder::Error),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -1364,7 +1365,11 @@ impl Interpreter {
             encoder::ListVal::Cons(value) =>
                 *value,
         };
-        let _send_args_mod = send_cons_list.modulate_to_string();
+        let send_mod = send_cons_list.modulate_to_string();
+
+        let recv_mod = encoder::ConsList::demodulate_from_string(&send_mod)
+            .map_err(Error::ConsListDem)?;
+        let _recv_ops = list_val_to_ops(encoder::ListVal::Cons(Box::new(recv_mod)));
 
         unimplemented!()
     }

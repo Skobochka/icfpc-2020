@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let join_response = intercom.send(join_request.clone(), &mut runtime).unwrap();
     println!("JOIN response: {}", &join_response);
 
-    let start_request = make_start_request(player_key, 0, 0, 0, 0);
+    let start_request = make_start_request(player_key, 0, 0, 0, 1);
     println!("Sending START request: {}", &start_request);
     let start_response = intercom.send(start_request.clone(), &mut runtime).unwrap();
     println!("START response: {}", &start_response);

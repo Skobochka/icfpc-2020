@@ -106,12 +106,50 @@ pub enum ListVal {
     Cons(Box<ConsList>),
 }
 
+impl ListVal {
+    pub fn as_encoded_number(&self) -> &EncodedNumber {
+        match self {
+            ListVal::Number(n) => n,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn as_cons(&self) -> &ConsList {
+        match self {
+            ListVal::Cons(l) => l.as_ref(),
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ConsList {
     Nil,
     Cons(ListVal, ListVal),
 }
 
+impl ConsList {
+    pub fn is_nil(&self) -> bool {
+        match self {
+            ConsList::Nil => true,
+            _ => false,
+        }
+
+    }
+    pub fn car(&self) -> &ListVal {
+        match self {
+            ConsList::Cons(a, _) => a,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn cdr(&self) -> &ListVal {
+        match self {
+            ConsList::Cons(_, a) => a,
+            _ => unreachable!(),
+        }
+    }
+}
 
 fn demodulate_list_from_string_helper(input: &str) -> Result<(ConsList, usize), Error> {
     fn demodulate_list_val(from: &str) -> Result<(ListVal, usize), Error> {
@@ -233,6 +271,7 @@ mod tests {
     use crate::code::{
         PositiveNumber,
         NegativeNumber,
+        make_dem_number,
     };
 
     #[test]
@@ -638,5 +677,11 @@ mod tests {
         let modul2 = "11011000011101100001111101111000010000000011010111101111000100000000011011000011101110010000000011110111000010000110111010000000001111011100110010011011010001101110000100001101110001000000000111101100001111101110000100001101110100000000011111111011000011101011110111000101111011011011111101000010101111011100110010011011010001101110000100001101110001000000011010110111001000000110110000100110000111111010110110000111111011000101111101011011111011000010101111010110101101011011000010011010110111001000000110110000100110000000000";
         let dem2 = ConsList::demodulate_from_string(&modul2);
         assert_ne!(dem1, dem2);
+    }
+
+    #[test]
+    fn lists_basic_ops() {
+        assert_eq!(ConsList::Nil.is_nil(), true);
+        assert_eq!(ConsList::Cons(ListVal::Number(make_dem_number(1)), ListVal::Cons(Box::new(ConsList::Nil))).is_nil(), false);
     }
 }

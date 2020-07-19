@@ -120,6 +120,44 @@ pub struct Equality {
     pub right: Ops,
 }
 
+pub fn make_dem_number(x: isize) -> EncodedNumber {
+    if x < 0 {
+        EncodedNumber {
+            number: Number::Negative(NegativeNumber {
+                value: x,
+            }),
+            modulation: Modulation::Demodulated,
+        }
+    }
+    else {
+        EncodedNumber {
+            number: Number::Positive(PositiveNumber {
+                value: x as usize,
+            }),
+            modulation: Modulation::Demodulated,
+        }
+    }
+}
+
+pub fn make_mod_number(x: isize) -> EncodedNumber {
+    if x < 0 {
+        EncodedNumber {
+            number: Number::Negative(NegativeNumber {
+                value: x,
+            }),
+            modulation: Modulation::Modulated,
+        }
+    }
+    else {
+        EncodedNumber {
+            number: Number::Positive(PositiveNumber {
+                value: x as usize,
+            }),
+            modulation: Modulation::Modulated,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

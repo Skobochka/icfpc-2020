@@ -1393,6 +1393,7 @@ impl Interpreter {
         // perform send
         let recv_mod = if let Some(outer_channel) = &self.outer_channel {
             let (tx, rx) = mpsc::channel();
+
             let outer_send_result = outer_channel.unbounded_send(OuterRequest::ProxySend {
                 modulated_req: send_mod,
                 modulated_rep: tx,
@@ -1400,6 +1401,7 @@ impl Interpreter {
             if let Err(..) = outer_send_result {
                 return Err(Error::OuterChannelIsClosed);
             }
+
             match rx.recv() {
                 Ok(response) =>
                     response,

@@ -3,7 +3,10 @@ use std::{
 };
 
 use futures::{
-    channel::mpsc::unbounded,
+    channel::{
+        oneshot,
+        mpsc::unbounded,
+    },
     StreamExt,
 };
 
@@ -28,10 +31,12 @@ use common::{
 enum Error {
     Proto(common::proto::Error),
     Readline(ReadlineError),
+    QuitTxTerminated,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    let (quit_tx, quit_rx) = oneshot::channel();
 
     let (outer_tx, mut outer_rx) = unbounded();
 
@@ -45,7 +50,7 @@ async fn main() -> Result<(), Error> {
 
         while let Some(request) = outer_rx.next().await {
             match request {
-                OuterRequest::ProxySend { modulated_req, modulated_rep, } =>
+                OuterRequest::ProxySend { modulated_req, modulated_rep, } => {
                     match intercom.async_send(modulated_req).await {
                         Ok(response) => {
                             if let Err(..) = modulated_rep.send(response) {
@@ -57,68 +62,75 @@ async fn main() -> Result<(), Error> {
                             println!("intercom send failed: {:?}, quitting", error);
                             break;
                         },
-                    },
+                    }
+                },
             }
         }
 
         println!("intercom task termination");
     });
 
-    let mut rl = Editor::<()>::new();
-    match rl.load_history("./galaxy-run-history.txt") {
-        Ok(()) =>
-            (),
-        Err(ReadlineError::Io(ref e)) if e.kind() == io::ErrorKind::NotFound => {
-            println!("no previous history in current dir");
-        },
-        Err(e) =>
-            return Err(Error::Readline(e)),
-    }
-
-    println!("Enter a command to run\nFor example: ap galaxy 0\nOr 'exit' to exit...\n");
-    loop {
-        let readline = rl.readline(">>> ");
-        let asm = match readline {
-            Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                line
-            },
-            Err(ReadlineError::Interrupted) => {
-                println!("Exit on <CTRL-C>");
-                break
-            },
-            Err(ReadlineError::Eof) => {
-                println!("Exit on <CTRL-D>");
-                break
-            },
-            Err(err) => {
-                println!("Read rrror: {:?}", err);
-                break
-            }
-        };
-        match &asm[..] {
-            "exit" => {
-                println!("Bye...");
-                break;
-            },
-            "" =>
-                continue,
-            _ =>
+    tokio::task::spawn_blocking(move || {
+        let mut rl = Editor::<()>::new();
+        match rl.load_history("./galaxy-run-history.txt") {
+            Ok(()) =>
                 (),
+            Err(ReadlineError::Io(ref e)) if e.kind() == io::ErrorKind::NotFound => {
+                println!("no previous history in current dir");
+            },
+            Err(e) =>
+                return Err(Error::Readline(e)),
         }
-        match session.eval_asm(&asm) {
-            Ok(ops) => {
-                println!("Ok:");
-                for op in ops.0 {
-                    println!("   {:?}",op);
+
+        println!("Enter a command to run\nFor example: ap galaxy 0\nOr 'exit' to exit...\n");
+        loop {
+            let readline = rl.readline(">>> ");
+            let asm = match readline {
+                Ok(line) => {
+                    rl.add_history_entry(line.as_str());
+                    line
+                },
+                Err(ReadlineError::Interrupted) => {
+                    println!("Exit on <CTRL-C>");
+                    break
+                },
+                Err(ReadlineError::Eof) => {
+                    println!("Exit on <CTRL-D>");
+                    break
+                },
+                Err(err) => {
+                    println!("Read rrror: {:?}", err);
+                    break
                 }
-                println!("");
-            },
-            Err(e) => {
-                println!("Error: {:?}",e);
-            },
+            };
+            match &asm[..] {
+                "exit" => {
+                    println!("Bye...");
+                    break;
+                },
+                "" =>
+                    continue,
+                _ =>
+                    (),
+            }
+            match session.eval_asm(&asm) {
+                Ok(ops) => {
+                    println!("Ok:");
+                    for op in ops.0 {
+                        println!("   {:?}",op);
+                    }
+                    println!("");
+                },
+                Err(e) => {
+                    println!("Error: {:?}",e);
+                },
+            }
         }
-    }
-    rl.save_history("./galaxy-run-history.txt").unwrap();
-    Ok(())
+        rl.save_history("./galaxy-run-history.txt").unwrap();
+
+        quit_tx.send(()).ok();
+        Ok(())
+    });
+
+    quit_rx.await.map_err(|_| Error::QuitTxTerminated)
 }

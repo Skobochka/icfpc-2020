@@ -48,6 +48,7 @@ mod if_zero;
 mod list;
 mod draw;
 mod modem;
+mod interact;
 mod env;
 mod various;
 mod encoder;

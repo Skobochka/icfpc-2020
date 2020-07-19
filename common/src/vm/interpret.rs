@@ -592,6 +592,37 @@ impl Interpreter {
                         break;
                     },
 
+                    // Interact0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 {
+                            protocol: arg,
+                        })),
+
+                    // Interact1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, }))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 {
+                            protocol, state: arg,
+                        })),
+
+                    // Interact2 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, }))) => {
+                        let vector = arg;
+                        ast_node = self.eval_interact(protocol, state, vector, env)?;
+                        break;
+                    },
+
+                    // F38_0 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0))) =>
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 {
+                            protocol: arg,
+                        })),
+
+                    // F38_1 on a something
+                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, }))) => {
+                        ast_node = self.eval_f38(protocol, arg, env)?;
+                        break;
+                    }
+
                     // unresolved fun on something
                     (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
                         match env.lookup_ast(&fun_ast_node) {
@@ -1539,6 +1570,48 @@ impl Interpreter {
         let tree = self.build_tree(script)?;
         self.eval(tree, env)
     }
+
+    fn eval_interact(&self, protocol: AstNode, state: AstNode, vector: AstNode, env: &Env) -> Result<AstNode, Error> {
+        Ok(AstNode::App {
+            fun: Box::new(AstNode::App {
+                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), }),
+                arg: Box::new(protocol.clone()),
+            }),
+            arg: Box::new(AstNode::App {
+                fun: Box::new(AstNode::App {
+                    fun: Box::new(protocol),
+                    arg: Box::new(state),
+                }),
+                arg: Box::new(vector),
+            }),
+        })
+    }
+
+    fn eval_f38(&self, protocol: AstNode, tuple3: AstNode, env: &Env) -> Result<AstNode, Error> {
+
+        unimplemented!()
+    }
+
+        // let args_ops = args.render();
+        // let ops = self.eval_num_list_map(args_ops, &|num| match num {
+        //     EncodedNumber { number, modulation: Modulation::Modulated, } =>
+        //         Ok(EncodedNumber { number, modulation: Modulation::Demodulated, }),
+        //     number @ EncodedNumber { modulation: Modulation::Demodulated, .. } =>
+        //         Err(Error::DemOnDemodulatedNumber { number, }),
+        // }, env)?;
+
+        // match self.build_tree(ops)? {
+        //     Ast::Empty =>
+        //         unreachable!(), // eval_num_list_map should return at least nil
+        //     Ast::Tree(ast_node) =>
+        //         Ok(ast_node),
+        // }
+
+// pub enum AstNode {
+//     Literal { value: Op, },
+//     App { fun: Box<AstNode>, arg: Box<AstNode>, },
+// }
+
 }
 
 fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
@@ -1635,6 +1708,11 @@ pub enum EvalFunAbs {
     Mod0,
     Dem0,
     Modem0,
+    Interact0,
+    Interact1 { protocol: AstNode, },
+    Interact2 { protocol: AstNode, state: AstNode, },
+    F38_0,
+    F38_1 { protocol: AstNode, },
 }
 
 impl EvalOp {
@@ -1699,7 +1777,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::If0)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)),
             Op::Const(Const::Fun(Fun::Interact)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0)),
             Op::Const(Const::Fun(Fun::Modem)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0)),
             Op::Const(Const::Fun(Fun::Galaxy)) =>
@@ -1710,6 +1788,8 @@ impl EvalOp {
                 EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
             Op::Const(Const::Fun(Fun::Checkerboard)) =>
                 unimplemented!(),
+            Op::Const(Const::Fun(Fun::F38)) =>
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0)),
             Op::App =>
                 unreachable!(), // should be processed by ast builder
             Op::Syntax(..) =>
@@ -1907,6 +1987,37 @@ impl EvalOp {
                 ops.extend(true_clause.render().0);
                 Ops(ops)
             },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::Interact))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Interact)),
+                ];
+                ops.extend(protocol.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::Interact)),
+                ];
+                ops.extend(protocol.render().0);
+                ops.extend(state.render().0);
+                Ops(ops)
+            },
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0)) =>
+                Ops(vec![Op::Const(Const::Fun(Fun::F38))]),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, })) => {
+                let mut ops = vec![
+                    Op::App,
+                    Op::Const(Const::Fun(Fun::F38)),
+                ];
+                ops.extend(protocol.render().0);
+                Ops(ops)
+            },
+
 
             EvalOp::Abs(ast_node) =>
                 ast_node.render(),

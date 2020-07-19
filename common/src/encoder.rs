@@ -70,6 +70,42 @@ impl Modulable for EncodedNumber {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+enum ListVal {
+    Number(EncodedNumber),
+    Cons(Box<ConsList>),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+enum ConsList {
+    Nil,
+    Cons(ListVal, ListVal),
+}
+
+impl Modulable for ConsList {
+    fn demodulate_from_string(_from: &str) -> Result<ConsList, Error> {
+        unimplemented!("Not implemented yet")
+    }
+
+    fn modulate_to_string(&self) -> String {
+        fn modulate_val(val: &ListVal) -> String {
+            match val {
+                ListVal::Number(num) => num.modulate_to_string(),
+                ListVal::Cons(c) => match c.as_ref() {
+                    ConsList::Nil => String::from("00"),
+                    _ => c.as_ref().modulate_to_string(),
+                }
+            }
+        }
+
+        match self {
+            ConsList::Nil => String::from("11"),
+            ConsList::Cons(v1, v2) => format!("11{}{}", modulate_val(v1), modulate_val(v2)),
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +167,53 @@ mod tests {
             modulation: Modulation::Modulated,
         };
         assert_eq!(num2.modulate_to_string(), "1011011111111");
+    }
+
+    #[test]
+    fn modulate_list_msg35() {
+        assert_eq!((ConsList::Nil).modulate_to_string(), "11");
+        assert_eq!(ConsList::Cons(
+                ListVal::Cons(Box::new(ConsList::Nil)),
+                ListVal::Cons(Box::new(ConsList::Nil)),
+            ).modulate_to_string(), "110000");
+        assert_eq!(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 0,
+                    }),
+                    modulation: Modulation::Modulated,
+                }),
+                ListVal::Cons(Box::new(ConsList::Nil)),
+            ).modulate_to_string(), "1101000");
+        assert_eq!(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 1,
+                    }),
+                    modulation: Modulation::Modulated,
+                }),
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 2,
+                    }),
+                    modulation: Modulation::Modulated,
+                }),
+            ).modulate_to_string(), "110110000101100010");
+        assert_eq!(ConsList::Cons(
+                ListVal::Number(EncodedNumber {
+                    number: Number::Positive(PositiveNumber {
+                        value: 1,
+                    }),
+                    modulation: Modulation::Modulated,
+                }),
+                ListVal::Cons(Box::new(ConsList::Cons(
+                    ListVal::Number(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 2,
+                        }),
+                        modulation: Modulation::Modulated,
+                    }),
+                    ListVal::Cons(Box::new(ConsList::Nil)))))
+            ).modulate_to_string(), "1101100001110110001000");
     }
 }

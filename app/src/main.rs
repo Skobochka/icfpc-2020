@@ -96,6 +96,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server_url = &args[1];
     let player_key = &args[2];
 
+    println!("Starting round with server: {} and player_key: {}", server_url, player_key);
+
     let intercom = Intercom::new(format!("{}/aliens/send", server_url));
     let mut runtime = Runtime::new().unwrap();
 

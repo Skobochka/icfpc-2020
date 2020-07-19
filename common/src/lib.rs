@@ -8,3 +8,4 @@ pub mod parser;
 pub mod encoder;
 pub mod proto;
 pub mod send;
+pub mod game;

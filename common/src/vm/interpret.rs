@@ -68,6 +68,8 @@ pub enum Error {
     ExpectedOnlyTwoCoordsPointForDrawArg,
     ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
     ConsListDem(encoder::Error),
+    SendOpIsNotSupportedWithoutOuterChannel,
+    OuterChannelIsClosed,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -1388,9 +1390,29 @@ impl Interpreter {
         };
         let send_mod = send_cons_list.modulate_to_string();
 
-        let recv_mod = encoder::ConsList::demodulate_from_string(&send_mod)
+        // perform send
+        let recv_mod = if let Some(outer_channel) = &self.outer_channel {
+            let (tx, rx) = mpsc::channel();
+            let outer_send_result = outer_channel.unbounded_send(OuterRequest::ProxySend {
+                modulated_req: send_mod,
+                modulated_rep: tx,
+            });
+            if let Err(..) = outer_send_result {
+                return Err(Error::OuterChannelIsClosed);
+            }
+            match rx.recv() {
+                Ok(response) =>
+                    response,
+                Err(..) =>
+                    return Err(Error::OuterChannelIsClosed),
+            }
+        } else {
+            return Err(Error::SendOpIsNotSupportedWithoutOuterChannel);
+        };
+
+        let recv_cons_list = encoder::ConsList::demodulate_from_string(&recv_mod)
             .map_err(Error::ConsListDem)?;
-        let recv_ops = list_val_to_ops(encoder::ListVal::Cons(Box::new(recv_mod)));
+        let recv_ops = list_val_to_ops(encoder::ListVal::Cons(Box::new(recv_cons_list)));
 
         match self.build_tree(recv_ops)? {
             Ast::Empty =>

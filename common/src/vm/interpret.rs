@@ -1369,9 +1369,14 @@ impl Interpreter {
 
         let recv_mod = encoder::ConsList::demodulate_from_string(&send_mod)
             .map_err(Error::ConsListDem)?;
-        let _recv_ops = list_val_to_ops(encoder::ListVal::Cons(Box::new(recv_mod)));
+        let recv_ops = list_val_to_ops(encoder::ListVal::Cons(Box::new(recv_mod)));
 
-        unimplemented!()
+        match self.build_tree(recv_ops)? {
+            Ast::Empty =>
+                unreachable!(), // list_val_to_ops should return at least nil
+            Ast::Tree(ast_node) =>
+                Ok(ast_node),
+        }
     }
 
     fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ListVal, Error> {

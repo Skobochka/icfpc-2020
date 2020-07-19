@@ -83,9 +83,10 @@ fn tmp_data(dx: f64, dy: f64) -> Data {
 }
 
 impl Data {
-    fn from_ops(ops: Ops) -> Option<Data> {     
-        for o in ops.0 {
-            if let Op::Const(Const::Picture(Picture{ points })) = o {
+    fn from_pics(pics: Vec<Picture>) -> Vec<Data> {
+        let mut dts = Vec::new();
+        for p in pics {
+            if let Picture{ points } = p {
                 let mut v = Vec::new();
                 for p in points {
                     let (x,y) = match p {
@@ -101,32 +102,30 @@ impl Data {
                     };
                     v.push([x as f64, y as f64]);
                 }
-                return Some(Data{ data: v });
+                dts.push(Data{ data: v });
             }
         }
-        None
+        dts
     }
 
 }
 
-fn asm_to_opt_data(session: &mut Session, asm: &str) -> Option<Data> {
+fn asm(session: &mut Session, asm: &str)  {
     //println!("ASM: {}",asm);
     match session.eval_asm(asm) {
-        Ok(ops) => {
-            let data = Data::from_ops(ops);
-            println!("{:?}",data);
-            data
+        Ok(_ops) => {
+            //println!("{:?}",ops);
         },
         Err(e) => {
             println!("Error: {:?}",e);
-            None
         },
     }
 }
 
 
 fn main() {
-    let mut session = match session() {
+    let (picture_tx,picture_rx) = std::sync::mpsc::channel();
+    let mut session = match session(picture_tx) {
         Ok(s) => s,
         Err(e) => {
             println!("Failed to create VM: {:?}",e);
@@ -135,12 +134,8 @@ fn main() {
     };
 
     //let init_asm = "ap draw ( ap ap vec 1 1 , ap ap vec 2 10 )";g
-    let init_asm = "ap car ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
-    
-    let init_data = match asm_to_opt_data(&mut session, init_asm) {
-        Some(data) => data,
-        None => Data{ data: vec![] }, 
-    };
+    let init_asm = "ap render ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";    
+    asm(&mut session, init_asm);
     
     let opengl = OpenGL::V3_2;
 
@@ -177,14 +172,14 @@ fn main() {
         size: (1280.0,800.0),
         glc: glc,
         cursor: Cursor::new(0.0,0.0),
-        main: MainScreen::new(&init_data,&cntx),
+        main: MainScreen::new(&Data{ data: vec![] },&cntx),
     };
     app.cursor(cursor);
 
-    let asm = "ap car ap cdr ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
-    if let Some(data) = asm_to_opt_data(&mut session, &asm) {
-        app.main.scene.map.next_data(&data);
-    }
+    //let asm = "ap car ap cdr ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
+    
+
+    
     
     let mut t = std::time::Instant::now();
     while let Some(e) = events.next(&mut window) {
@@ -200,10 +195,13 @@ fn main() {
             Event::Loop(Loop::Update(_args)) => {
                 app.cursor(cursor);
                 cursor.scroll = [0.0; 2];
-                //if t.elapsed() > std::time::Duration::new(0,500_000_000) {
-                //    app.main.scene.map.test_step();
-                //    t = std::time::Instant::now();
-                //}
+
+                if let Ok(pics) = picture_rx.try_recv() {
+                    let datas = Data::from_pics(pics);
+                    for data in datas {
+                        app.main.scene.map.next_data(&data);
+                    }
+                }
             },
             Event::Input(Input::Button(ButtonArgs { state: ButtonState::Release, button, .. }),_) => match button {
                 Button::Keyboard(Key::LCtrl) => { cursor.scroll_to_scale = false; },
@@ -539,7 +537,7 @@ impl<'t> App<'t> {
     }
 }
 
-fn session() -> Result<Session,common::proto::Error> {
+fn session(sender: std::sync::mpsc::Sender<Vec<Picture>>) -> Result<Session,common::proto::Error> {
     let (outer_tx, mut outer_rx) = unbounded();
 
     let mut session = Session::with_interpreter(
@@ -553,6 +551,7 @@ fn session() -> Result<Session,common::proto::Error> {
         runtime.block_on(async {
             while let Some(request) = outer_rx.next().await {
                 match request {
+                    OuterRequest::RenderPictures { pictures } => { sender.send(pictures).ok(); },
                     OuterRequest::ProxySend { modulated_req, modulated_rep, } => {
                         match intercom.async_send(modulated_req).await {
                             Ok(response) => {

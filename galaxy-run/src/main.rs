@@ -51,8 +51,10 @@ async fn main() -> Result<(), Error> {
         while let Some(request) = outer_rx.next().await {
             match request {
                 OuterRequest::ProxySend { modulated_req, modulated_rep, } => {
+                    println!("** >> transmission rq: {:?}", modulated_req);
                     match intercom.async_send(modulated_req).await {
                         Ok(response) => {
+                            println!("** << transmission rp: {:?}", response);
                             if let Err(..) = modulated_rep.send(response) {
                                 println!("interpreter has gone, quitting");
                                 break;

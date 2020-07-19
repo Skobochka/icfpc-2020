@@ -2,6 +2,7 @@ use super::{
     Env,
     Error,
     Interpreter,
+    EvalOp,
     EvalFun,
     EvalFunNum,
     Op,
@@ -108,6 +109,6 @@ fn eval() {
             ).unwrap(),
             &mut Env::new(),
         ),
-        Err(Error::AppExpectsNumButFunProvided { fun: EvalFun::ArgNum(EvalFunNum::Dec0), }),
+        Err(Error::AppExpectsNumButFunProvided { fun: EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dec0)).render(), }),
     );
 }

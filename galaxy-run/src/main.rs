@@ -40,11 +40,6 @@ async fn main() -> Result<(), Error> {
 
     let (outer_tx, mut outer_rx) = unbounded();
 
-    let mut session = Session::with_interpreter(
-        galaxy(),
-        Interpreter::with_outer_channel(outer_tx),
-    ).map_err(Error::Proto)?;
-
     tokio::spawn(async move {
         let intercom = Intercom::proxy();
 
@@ -76,6 +71,11 @@ async fn main() -> Result<(), Error> {
     });
 
     tokio::task::spawn_blocking(move || {
+        let mut session = Session::with_interpreter(
+            galaxy(),
+            Interpreter::with_outer_channel(outer_tx),
+        ).map_err(Error::Proto)?;
+
         let mut rl = Editor::<()>::new();
         match rl.load_history("./galaxy-run-history.txt") {
             Ok(()) =>

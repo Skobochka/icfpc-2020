@@ -1,4 +1,5 @@
 use std::{
+    rc::Rc,
     sync::mpsc,
     collections::HashMap,
 };
@@ -53,10 +54,10 @@ pub enum OuterRequest {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
     NoAppFunProvided,
-    NoAppArgProvided { fun: AstNode, },
+    NoAppArgProvided { fun: Ops, },
     EvalEmptyTree,
-    AppOnNumber { number: EncodedNumber, arg: AstNode, },
-    AppExpectsNumButFunProvided { fun: EvalFun, },
+    AppOnNumber { number: EncodedNumber, arg: Ops, },
+    AppExpectsNumButFunProvided { fun: Ops, },
     TwoNumbersOpInDifferentModulation { number_a: EncodedNumber, number_b: EncodedNumber, },
     DivisionByZero,
     IsNilAppOnANumber { number: EncodedNumber, },
@@ -64,7 +65,7 @@ pub enum Error {
     DemOnDemodulatedNumber { number: EncodedNumber, },
     ListNotClosed,
     ListCommaWithoutElement,
-    ListSyntaxUnexpectedNode { node: AstNode, },
+    ListSyntaxUnexpectedNode { node: Ops, },
     ListSyntaxSeveralCommas,
     ListSyntaxClosingAfterComma,
     InvalidCoordForDrawArg,
@@ -86,7 +87,7 @@ pub enum Ast {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum AstNode {
     Literal { value: Op, },
-    App { fun: Box<AstNode>, arg: Box<AstNode>, },
+    App { fun: Rc<AstNode>, arg: Rc<AstNode>, },
 }
 
 #[derive(Debug)]
@@ -135,6 +136,31 @@ impl Env {
     }
 }
 
+#[derive(Debug)]
+pub struct Cache {
+    memo: HashMap<Rc<AstNode>, Rc<AstNode>>,
+}
+
+impl Cache {
+    pub fn new() -> Cache {
+        Cache {
+            memo: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, key: &Rc<AstNode>) -> Option<Rc<AstNode>> {
+        if let Some(ast_node) = self.memo.get(key) {
+            Some(ast_node.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn memo(&mut self, key: Rc<AstNode>, value: Rc<AstNode>) {
+        self.memo.insert(key, value);
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
@@ -148,12 +174,16 @@ impl Interpreter {
         }
     }
 
+    pub fn make_prev_variable_ast(&self) -> Ast {
+        Ast::Tree(AstNode::Literal { value: Op::Variable(Variable { name: Number::Negative(NegativeNumber { value: -2, }), }), })
+    }
+
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,
-            AwaitAppArg { fun: AstNode, },
+            AwaitAppArg { fun: Rc<AstNode>, },
             ListBegin,
-            ListPush { element: AstNode, },
+            ListPush { element: Rc<AstNode>, },
             ListContinue,
             ListContinueComma,
         }
@@ -195,15 +225,15 @@ impl Interpreter {
                     (Some(State::AwaitAppFun), None) =>
                         return Err(Error::NoAppFunProvided),
                     (Some(State::AwaitAppFun), Some(node)) => {
-                        states.push(State::AwaitAppArg { fun: node, });
+                        states.push(State::AwaitAppArg { fun: Rc::new(node), });
                         break;
                     },
                     (Some(State::AwaitAppArg { fun, }), None) =>
-                        return Err(Error::NoAppArgProvided { fun, }),
+                        return Err(Error::NoAppArgProvided { fun: fun.render(), }),
                     (Some(State::AwaitAppArg { fun, }), Some(node)) => {
                         maybe_node = Some(AstNode::App {
-                            fun: Box::new(fun),
-                            arg: Box::new(node),
+                            fun: fun,
+                            arg: Rc::new(node),
                         });
                     },
                     (Some(State::ListBegin), None) =>
@@ -215,7 +245,7 @@ impl Interpreter {
                             value: Op::Const(Const::Fun(Fun::Nil)),
                         }),
                     (Some(State::ListBegin), Some(node)) => {
-                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListPush { element: Rc::new(node), });
                         states.push(State::ListContinue);
                         break;
                     },
@@ -230,7 +260,7 @@ impl Interpreter {
                             value: Op::Const(Const::Fun(Fun::Nil)),
                         }),
                     (Some(State::ListContinue), Some(node)) =>
-                        return Err(Error::ListSyntaxUnexpectedNode { node, }),
+                        return Err(Error::ListSyntaxUnexpectedNode { node: Rc::new(node).render(), }),
                     (Some(State::ListContinueComma), None) =>
                         return Err(Error::ListNotClosed),
                     (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) =>
@@ -238,7 +268,7 @@ impl Interpreter {
                     (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::RightParen), })) =>
                         return Err(Error::ListSyntaxClosingAfterComma),
                     (Some(State::ListContinueComma), Some(node)) => {
-                        states.push(State::ListPush { element: node, });
+                        states.push(State::ListPush { element: Rc::new(node), });
                         states.push(State::ListContinue);
                         break;
                     },
@@ -246,11 +276,11 @@ impl Interpreter {
                         unreachable!(),
                     (Some(State::ListPush { element, }), Some(tail)) =>
                         maybe_node = Some(AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
-                                arg: Box::new(element),
+                            fun: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                                arg: element,
                             }),
-                            arg: Box::new(tail),
+                            arg: Rc::new(tail),
                         }),
                 }
             }
@@ -267,398 +297,431 @@ impl Interpreter {
         Ok(env)
     }
 
-    fn eval_equality(&self, eq: Equality, env: &mut Env) -> Result<(), Error> {
-        let Equality { left, right } = eq;
-
-        let left_ast = self.build_tree(left)?;
-        // let left = self.eval(left_ast, env)?;
-
-        let right_ast = self.build_tree(right)?;
-        // let right = self.eval(right_ast, env)?;
-
+    fn eval_equality(&self, Equality { left, right }: Equality, env: &mut Env) -> Result<(), Error> {
         env.add_equality(
-            left_ast,
-            right_ast,
-            // self.build_tree(left.clone())?,
-            // self.build_tree(right.clone())?,
+            self.build_tree(left)?,
+            self.build_tree(right)?,
         );
 
         Ok(())
-        // Ok(Equality { left, right, })
     }
 
     pub fn lookup_env(&self, env: &Env, key: Ops) -> Result<Option<Ops>, Error> {
         if let Ast::Tree(ast_node) = self.build_tree(key)? {
             if let Some(ast_node) = env.lookup_ast(&ast_node) {
-                return Ok(Some(ast_node.clone().render()))
+                let ast_node = Rc::new(ast_node.clone());
+                return Ok(Some(ast_node.render()))
             }
         }
         Ok(None)
     }
 
     pub fn eval(&self, ast: Ast, env: &Env) -> Result<Ops, Error> {
+        let mut cache = Cache::new();
+        self.eval_cache(ast, env, &mut cache)
+    }
+
+    pub fn eval_cache(&self, ast: Ast, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
         match ast {
             Ast::Empty =>
                 Err(Error::EvalEmptyTree),
             Ast::Tree(node) =>
-                self.eval_tree(node, env),
+                self.eval_tree(node, env, cache),
         }
     }
 
-    fn eval_tree(&self, mut ast_node: AstNode, env: &Env) -> Result<Ops, Error> {
+    fn eval_tree(&self, ast_node: AstNode, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
+        let mut ast_node = Rc::new(ast_node);
+
         enum State {
-            EvalAppFun { arg: AstNode, },
+            EvalAppFun { arg: Rc<AstNode>, },
             EvalAppArgNum { fun: EvalFunNum, },
             EvalAppArgIsNil,
         }
 
+        struct StackFrame {
+            root: Rc<AstNode>,
+            state: State,
+        }
+
         let mut states = vec![];
         loop {
-            let mut eval_op = match ast_node {
+            if let Some(memo_ast) = cache.get(&ast_node) {
+                ast_node = memo_ast;
+                continue;
+            }
+
+            let mut eval_op = match &*ast_node {
                 AstNode::Literal { value, } =>
-                    EvalOp::new(value),
+                    EvalOp::new(value.clone()),
 
                 AstNode::App { fun, arg, } => {
-                    states.push(State::EvalAppFun { arg: *arg, });
-                    ast_node = *fun;
+                    states.push(StackFrame { root: ast_node.clone(), state: State::EvalAppFun { arg: arg.clone(), }, });
+                    ast_node = fun.clone();
                     continue;
                 },
             };
 
             loop {
-                match (states.pop(), eval_op) {
-                    (None, EvalOp::Abs(top_ast_node)) => {
-                        match env.lookup_ast(&top_ast_node) {
-                            Some(subst_ast_node) => {
-                                ast_node = subst_ast_node.clone();
-                                break;
+                let frame = match states.pop() {
+                    None =>
+                        match eval_op {
+                            EvalOp::Abs(top_ast_node) => {
+                                match env.lookup_ast(&top_ast_node) {
+                                    Some(subst_ast_node) => {
+                                        ast_node = Rc::new(subst_ast_node.clone());
+                                        break;
+                                    },
+                                    None =>
+                                        return Ok(EvalOp::Abs(top_ast_node).render()),
+                                }
                             },
-                            None =>
-                                return Ok(EvalOp::Abs(top_ast_node).render()),
-                        }
-                    },
 
-                    (None, eval_op) =>
-                        return Ok(eval_op.render()),
+                            eval_op =>
+                                return Ok(eval_op.render()),
+                        },
+                    Some(frame) =>
+                        frame,
+                };
 
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Num { number, }) =>
-                        return Err(Error::AppOnNumber { number, arg, }),
+                let root = frame.root;
+                match (frame.state, eval_op) {
+                    (State::EvalAppFun { arg, .. }, EvalOp::Num { number, }) =>
+                        return Err(Error::AppOnNumber { number, arg: arg.render(), }),
 
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgNum(fun))) => {
-                        states.push(State::EvalAppArgNum { fun, });
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgNum(fun))) => {
+                        states.push(StackFrame { root, state: State::EvalAppArgNum { fun, }, });
                         ast_node = arg;
                         break;
                     },
 
                     // true0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0))) =>
+                    (State::EvalAppFun { arg, .. }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 {
                             captured: arg,
                         })),
 
                     // true1 on a something: ap ap t x0 x1 = x0
-                    (Some(State::EvalAppFun { .. }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, }))) => {
+                    (State::EvalAppFun { .. }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, }))) => {
                         ast_node = captured;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // false0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 {
                             captured: arg,
                         })),
 
                     // false1 on a something: ap ap t x0 x1 = x1
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { .. }))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { .. }))) => {
                         ast_node = arg;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // I0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0))) => {
                         ast_node = arg;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // C0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C0))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 {
                             x: arg,
                         })),
 
                     // C1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 { x, }))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 { x, }))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 {
                             x, y: arg,
                         })),
 
                     // C2 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(x),
-                                arg: Box::new(arg),
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, }))) => {
+                        ast_node = Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::App {
+                                fun: x,
+                                arg: arg,
                             }),
-                            arg: Box::new(y),
-                        };
+                            arg: y,
+                        });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // B0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B0))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 {
                             x: arg,
                         })),
 
                     // B1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 { x, }))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 { x, }))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 {
                             x, y: arg,
                         })),
 
                     // B2 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(x),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(y),
-                                arg: Box::new(arg),
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, }))) => {
+                        ast_node = Rc::new(AstNode::App {
+                            fun: x,
+                            arg: Rc::new(AstNode::App {
+                                fun: y,
+                                arg: arg,
                             }),
-                        };
+                        });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // S0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S0))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 {
                             x: arg,
                         })),
 
                     // S1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 { x, }))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 { x, }))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 {
                             x, y: arg,
                         })),
 
                     // S2 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(x),
-                                arg: Box::new(arg.clone()),
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, }))) => {
+                        ast_node = Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::App {
+                                fun: x,
+                                arg: arg.clone(),
                             }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(y),
-                                arg: Box::new(arg),
+                            arg: Rc::new(AstNode::App {
+                                fun: y,
+                                arg: arg,
                             }),
-                        };
+                        });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Cons0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 {
                             x: arg,
                         })),
 
                     // Cons1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 { x, }))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 { x, }))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 {
                             x, y: arg,
                         })),
 
                     // Cons2 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { x, y, }))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(AstNode::App {
-                                fun: Box::new(arg),
-                                arg: Box::new(x),
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { x, y, }))) => {
+                        ast_node = Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::App {
+                                fun: arg,
+                                arg: x,
                             }),
-                            arg: Box::new(y),
-                        };
+                            arg: y,
+                        });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Car0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Car0))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(arg),
-                            arg: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }),
-                        };
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Car0))) => {
+                        ast_node = Rc::new(AstNode::App {
+                            fun: arg,
+                            arg: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }),
+                        });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Cdr0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0))) => {
-                        ast_node = AstNode::App {
-                            fun: Box::new(arg),
-                            arg: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), }),
-                        };
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0))) => {
+                        ast_node = Rc::new(AstNode::App {
+                            fun: arg,
+                            arg: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), }),
+                        });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Nil0 on a something
-                    (Some(State::EvalAppFun { .. }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
-                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), };
+                    (State::EvalAppFun { .. }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
+                        ast_node = Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // IsNil0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0))) => {
-                        states.push(State::EvalAppArgIsNil);
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0))) => {
+                        states.push(StackFrame { root, state: State::EvalAppArgIsNil, });
                         ast_node = arg;
                         break;
                     },
 
                     // IsNil on a number
-                    (Some(State::EvalAppArgIsNil), EvalOp::Num { number, }) =>
+                    (State::EvalAppArgIsNil, EvalOp::Num { number, }) =>
                         return Err(Error::IsNilAppOnANumber { number, }),
 
                     // IsNil on a Nil0
-                    (Some(State::EvalAppArgIsNil), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
-                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), };
+                    (State::EvalAppArgIsNil, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
+                        ast_node = Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // IsNil on another fun
-                    (Some(State::EvalAppArgIsNil), EvalOp::Fun(..)) => {
-                        ast_node = AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), };
+                    (State::EvalAppArgIsNil, EvalOp::Fun(..)) => {
+                        ast_node = Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // IsNil on an abstract
-                    (Some(State::EvalAppArgIsNil), EvalOp::Abs(arg_ast_node)) =>
+                    (State::EvalAppArgIsNil, EvalOp::Abs(arg_ast_node)) =>
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
-                                states.push(State::EvalAppArgIsNil);
-                                ast_node = subst_ast_node.clone();
+                                states.push(StackFrame { root, state: State::EvalAppArgIsNil, });
+                                ast_node = Rc::new(subst_ast_node.clone());
                                 break;
                             },
                             None =>
-                                eval_op = EvalOp::Abs(AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
-                                    arg: Box::new(arg_ast_node),
-                                }),
+                                eval_op = EvalOp::Abs(Rc::new(AstNode::App {
+                                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }),
+                                    arg: arg_ast_node,
+                                })),
                         },
 
                     // IfZero1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, }))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, }))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 {
                             cond, true_clause: arg,
                         })),
 
                     // IfZero2 on a something
-                    (Some(State::EvalAppFun { arg: false_clause, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 { cond, true_clause, }))) => {
+                    (State::EvalAppFun { arg: false_clause, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 { cond, true_clause, }))) => {
                         ast_node = match cond {
                             EncodedNumber { number: Number::Positive(PositiveNumber { value: 0, }), .. } =>
                                 true_clause,
                             EncodedNumber { .. } =>
                                 false_clause,
                         };
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Draw0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0))) => {
-                        ast_node = AstNode::Literal {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0))) => {
+                        ast_node = Rc::new(AstNode::Literal {
                             value: Op::Const(Const::Picture(self.eval_draw(arg, env)?)),
-                        };
+                        });
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // MultipleDraw0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0))) => {
                         ast_node = self.eval_multiple_draw(arg, env)?;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Send0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
                         ast_node = self.eval_send(arg, env)?;
                         break;
                     },
 
                     // Render0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0))) => {
                         ast_node = self.eval_render(arg, env)?;
                         break;
                     },
 
                     // Mod0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0))) => {
                         ast_node = self.eval_mod(arg, env)?;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Dem0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0))) => {
                         ast_node = self.eval_dem(arg, env)?;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Modem0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0))) => {
                         ast_node = self.eval_modem(arg, env)?;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Interact0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 {
                             protocol: arg,
                         })),
 
                     // Interact1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, }))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, }))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 {
                             protocol, state: arg,
                         })),
 
                     // Interact2 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, }))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, }))) => {
                         let vector = arg;
                         ast_node = self.eval_interact(protocol, state, vector, env)?;
                         break;
                     },
 
                     // F38_0 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0))) =>
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0))) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 {
                             protocol: arg,
                         })),
 
                     // F38_1 on a something
-                    (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, }))) => {
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, }))) => {
                         ast_node = self.eval_f38(protocol, arg, env)?;
                         break;
                     }
 
                     // unresolved fun on something
-                    (Some(State::EvalAppFun { arg: arg_ast_node, }), EvalOp::Abs(fun_ast_node)) =>
+                    (State::EvalAppFun { arg: arg_ast_node, }, EvalOp::Abs(fun_ast_node)) =>
                         match env.lookup_ast(&fun_ast_node) {
                             Some(subst_ast_node) => {
-                                ast_node = AstNode::App {
-                                    fun: Box::new(subst_ast_node.clone()),
-                                    arg: Box::new(arg_ast_node),
-                                };
+                                ast_node = Rc::new(AstNode::App {
+                                    fun: Rc::new(subst_ast_node.clone()),
+                                    arg: arg_ast_node,
+                                });
                                 break;
                             }
                             None =>
-                                eval_op = EvalOp::Abs(AstNode::App {
-                                    fun: Box::new(fun_ast_node),
-                                    arg: Box::new(arg_ast_node),
-                                }),
+                                eval_op = EvalOp::Abs(Rc::new(AstNode::App {
+                                    fun: fun_ast_node,
+                                    arg: arg_ast_node,
+                                })),
                         },
 
                     // if0 on a number
-                    (Some(State::EvalAppArgNum { fun: EvalFunNum::IfZero0, }), EvalOp::Num { number, }) =>
+                    (State::EvalAppArgNum { fun: EvalFunNum::IfZero0, }, EvalOp::Num { number, }) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 {
                             cond: number,
                         })),
 
                     // inc on positive number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Inc0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Inc0, },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value, }),
@@ -675,7 +738,7 @@ impl Interpreter {
 
                     // inc on negative number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Inc0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Inc0, },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value, }),
@@ -696,7 +759,7 @@ impl Interpreter {
 
                     // dec on positive number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dec0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Dec0, },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value, }),
@@ -717,7 +780,7 @@ impl Interpreter {
 
                     // dec on negative number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Dec0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Dec0, },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value, }),
@@ -734,7 +797,7 @@ impl Interpreter {
 
                     // sum0 on a number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Sum0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Sum0, },
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Sum1 {
@@ -743,39 +806,39 @@ impl Interpreter {
 
                     // sum1 on two numbers with different modulation
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Sum1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Modulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
                     ) |
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Sum1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Demodulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
                     ) =>
                         return Err(Error::TwoNumbersOpInDifferentModulation { number_a, number_b, }),
 
                     // sum1 on two positive
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: value_b, }),
@@ -792,14 +855,14 @@ impl Interpreter {
 
                     // sum1 on positive and negative
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value_b, }),
@@ -820,14 +883,14 @@ impl Interpreter {
 
                     // sum1 on negative and positive
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: value_b, }),
@@ -848,14 +911,14 @@ impl Interpreter {
 
                     // sum1 on two negative
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Sum1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value_b, }),
@@ -872,7 +935,7 @@ impl Interpreter {
 
                     // mul0 on a number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Mul0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Mul0, },
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mul1 {
@@ -881,39 +944,39 @@ impl Interpreter {
 
                     // mul1 on two numbers with different modulation
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Mul1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Modulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
                     ) |
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Mul1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Demodulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
                     ) =>
                         return Err(Error::TwoNumbersOpInDifferentModulation { number_a, number_b, }),
 
                     // mul1 on two positive
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: value_b, }),
@@ -930,14 +993,14 @@ impl Interpreter {
 
                     // mul1 on positive and negative
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value_b, }),
@@ -954,14 +1017,14 @@ impl Interpreter {
 
                     // mul1 on negative and positive
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: value_b, }),
@@ -978,14 +1041,14 @@ impl Interpreter {
 
                     // mul1 on two negative
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Mul1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value_b, }),
@@ -1002,7 +1065,7 @@ impl Interpreter {
 
                     // div0 on a number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Div0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Div0, },
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Div1 {
@@ -1011,46 +1074,46 @@ impl Interpreter {
 
                     // div1 on a zero
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Div1 { .. }, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Div1 { .. }, },
                         EvalOp::Num { number: EncodedNumber { number: Number::Positive(PositiveNumber { value: 0, }), .. }, },
                     ) =>
                         return Err(Error::DivisionByZero),
 
                     // div1 on two numbers with different modulation
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Div1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Modulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
                     ) |
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Div1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Demodulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
                     ) =>
                         return Err(Error::TwoNumbersOpInDifferentModulation { number_a, number_b, }),
 
                     // div1 on two positive
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: value_b, }),
@@ -1067,14 +1130,14 @@ impl Interpreter {
 
                     // div1 on positive and negative
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Positive(PositiveNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value_b, }),
@@ -1091,14 +1154,14 @@ impl Interpreter {
 
                     // div1 on negative and positive
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: value_b, }),
@@ -1115,14 +1178,14 @@ impl Interpreter {
 
                     // div1 on two negative
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Div1 {
                                 captured: EncodedNumber {
                                     number: Number::Negative(NegativeNumber { value: value_a, }),
                                     modulation,
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value: value_b, }),
@@ -1139,7 +1202,7 @@ impl Interpreter {
 
                     // eq0 on a number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Eq0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Eq0, },
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq1 {
@@ -1148,21 +1211,21 @@ impl Interpreter {
 
                     // eq1 on two equal numbers
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Eq1 { captured: number_a, }, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Eq1 { captured: number_a, }, },
                         EvalOp::Num { number: number_b, },
                     ) if number_a == number_b =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
 
                     // eq1 on two different numbers
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Eq1 { .. }, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Eq1 { .. }, },
                         EvalOp::Num { .. },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)),
 
                     // lt0 on a number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Lt0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Lt0, },
                         EvalOp::Num { number, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt1 {
@@ -1171,36 +1234,36 @@ impl Interpreter {
 
                     // lt1 on two numbers with different modulation
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Lt1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Modulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Demodulated, .. }, },
                     ) |
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Lt1 {
                                 captured: number_a @ EncodedNumber {
                                     modulation: Modulation::Demodulated,
                                     ..
                                 },
                             },
-                        }),
+                        },
                         EvalOp::Num { number: number_b @ EncodedNumber { modulation: Modulation::Modulated, .. }, },
                     ) =>
                         return Err(Error::TwoNumbersOpInDifferentModulation { number_a, number_b, }),
 
                     // lt1 on two positive
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Lt1 {
                                 captured: EncodedNumber { number: Number::Positive(PositiveNumber { value: value_a, }), .. },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber { number: Number::Positive(PositiveNumber { value: value_b, }), .. },
                         },
@@ -1213,11 +1276,11 @@ impl Interpreter {
 
                     // lt1 on two negative
                     (
-                        Some(State::EvalAppArgNum {
+                        State::EvalAppArgNum {
                             fun: EvalFunNum::Lt1 {
                                 captured: EncodedNumber { number: Number::Negative(NegativeNumber { value: value_a, }), .. },
                             },
-                        }),
+                        },
                         EvalOp::Num {
                             number: EncodedNumber { number: Number::Negative(NegativeNumber { value: value_b, }), .. },
                         },
@@ -1230,21 +1293,21 @@ impl Interpreter {
 
                     // lt1 on positive and negative
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Lt1 { captured: EncodedNumber { number: Number::Positive(..), .. }, }, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Lt1 { captured: EncodedNumber { number: Number::Positive(..), .. }, }, },
                         EvalOp::Num { number: EncodedNumber { number: Number::Negative(..), .. }, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)),
 
                     // lt1 on negative and positive
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Lt1 { captured: EncodedNumber { number: Number::Negative(..), .. }, }, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Lt1 { captured: EncodedNumber { number: Number::Negative(..), .. }, }, },
                         EvalOp::Num { number: EncodedNumber { number: Number::Positive(..), .. }, },
                     ) =>
                         eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
 
                     // neg on zero
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Neg0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Neg0, },
                         number @ EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value: 0, }),
@@ -1256,7 +1319,7 @@ impl Interpreter {
 
                     // neg on positive number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Neg0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Neg0, },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Positive(PositiveNumber { value, }),
@@ -1273,7 +1336,7 @@ impl Interpreter {
 
                     // neg on negative number
                     (
-                        Some(State::EvalAppArgNum { fun: EvalFunNum::Neg0, }),
+                        State::EvalAppArgNum { fun: EvalFunNum::Neg0, },
                         EvalOp::Num {
                             number: EncodedNumber {
                                 number: Number::Negative(NegativeNumber { value, }),
@@ -1289,15 +1352,15 @@ impl Interpreter {
                         },
 
                     // number type argument fun on a fun
-                    (Some(State::EvalAppArgNum { .. }), EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun, }),
+                    (State::EvalAppArgNum { .. }, EvalOp::Fun(fun)) =>
+                        return Err(Error::AppExpectsNumButFunProvided { fun: EvalOp::Fun(fun).render(), }),
 
                     // fun on abs
-                    (Some(State::EvalAppArgNum { fun }), EvalOp::Abs(arg_ast_node)) =>
+                    (State::EvalAppArgNum { fun }, EvalOp::Abs(arg_ast_node)) =>
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
-                                states.push(State::EvalAppArgNum { fun, });
-                                ast_node = subst_ast_node.clone();
+                                states.push(StackFrame { root, state: State::EvalAppArgNum { fun, }, });
+                                ast_node = Rc::new(subst_ast_node.clone());
                                 break;
                             },
                             None => {
@@ -1320,11 +1383,11 @@ impl Interpreter {
                                                         match fun_ops_iter.next() {
                                                             None =>
                                                                 AstNode::App {
-                                                                    fun: Box::new(AstNode::App {
-                                                                        fun: Box::new(AstNode::Literal { value: op_a, }),
-                                                                        arg: Box::new(AstNode::Literal { value: op_b, }),
+                                                                    fun: Rc::new(AstNode::App {
+                                                                        fun: Rc::new(AstNode::Literal { value: op_a, }),
+                                                                        arg: Rc::new(AstNode::Literal { value: op_b, }),
                                                                     }),
-                                                                    arg: Box::new(arg_ast_node),
+                                                                    arg: arg_ast_node,
                                                                 },
                                                             Some(..) =>
                                                                 unreachable!(),
@@ -1333,19 +1396,31 @@ impl Interpreter {
                                         },
                                     Some(op_a) =>
                                         AstNode::App {
-                                            fun: Box::new(AstNode::Literal { value: op_a, }),
-                                            arg: Box::new(arg_ast_node),
+                                            fun: Rc::new(AstNode::Literal { value: op_a, }),
+                                            arg: arg_ast_node,
                                         },
                                 };
-                                eval_op = EvalOp::Abs(ast_node);
+                                eval_op = EvalOp::Abs(Rc::new(ast_node));
                             },
                         },
+                }
+
+                let maybe_cache = match &eval_op {
+                    EvalOp::Num { ref number, } =>
+                        Some(Rc::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(number.clone())), })),
+                    EvalOp::Abs(ref ast_node) =>
+                        Some(ast_node.clone()),
+                    EvalOp::Fun(..) =>
+                        None,
+                };
+                if let Some(value) = maybe_cache {
+                    cache.memo(root, value);
                 }
             }
         }
     }
 
-    fn eval_draw(&self, points: AstNode, env: &Env) -> Result<Picture, Error> {
+    fn eval_draw(&self, points: Rc<AstNode>, env: &Env) -> Result<Picture, Error> {
         let mut points_vec = Vec::new();
         let mut points_ops = points.render();
         loop {
@@ -1380,7 +1455,7 @@ impl Interpreter {
         Ok(Picture { points: points_vec, })
     }
 
-    fn eval_multiple_draw(&self, points_list_of_lists: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_multiple_draw(&self, points_list_of_lists: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let mut list_ops = points_list_of_lists.render();
 
         let mut output_ops = Ops(vec![]);
@@ -1407,11 +1482,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // we should got at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_send(&self, send_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_send(&self, send_args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let args_ops = send_args.render();
         let send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
         let send_cons_list = match send_list_val {
@@ -1452,11 +1527,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // list_val_to_ops should return at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_render(&self, render_args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_render(&self, render_args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let mut render_ops = render_args.render();
 
         let mut pictures = Vec::new();
@@ -1492,10 +1567,10 @@ impl Interpreter {
             return Err(Error::RenderOpIsNotSupportedWithoutOuterChannel);
         };
 
-        Ok(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })
+        Ok(Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }))
     }
 
-    fn eval_mod(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_mod(&self, args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let args_ops = args.render();
         let ops = self.eval_num_list_map(args_ops, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Demodulated, } =>
@@ -1508,11 +1583,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // eval_num_list_map should return at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_dem(&self, args: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_dem(&self, args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let args_ops = args.render();
         let ops = self.eval_num_list_map(args_ops, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Modulated, } =>
@@ -1525,11 +1600,11 @@ impl Interpreter {
             Ast::Empty =>
                 unreachable!(), // eval_num_list_map should return at least nil
             Ast::Tree(ast_node) =>
-                Ok(ast_node),
+                Ok(Rc::new(ast_node)),
         }
     }
 
-    fn eval_modem(&self, ast_node: AstNode, env: &Env) -> Result<AstNode, Error> {
+    fn eval_modem(&self, ast_node: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
         let ast_node = self.eval_mod(ast_node, env)?;
         let ast_node = self.eval_dem(ast_node, env)?;
         Ok(ast_node)
@@ -1615,99 +1690,99 @@ impl Interpreter {
         self.eval(tree, env)
     }
 
-    fn eval_interact(&self, protocol: AstNode, state: AstNode, vector: AstNode, _env: &Env) -> Result<AstNode, Error> {
-        Ok(AstNode::App {
-            fun: Box::new(AstNode::App {
-                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), }),
-                arg: Box::new(protocol.clone()),
+    fn eval_interact(&self, protocol: Rc<AstNode>, state: Rc<AstNode>, vector: Rc<AstNode>, _env: &Env) -> Result<Rc<AstNode>, Error> {
+        Ok(Rc::new(AstNode::App {
+            fun: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), }),
+                arg: protocol.clone(),
             }),
-            arg: Box::new(AstNode::App {
-                fun: Box::new(AstNode::App {
-                    fun: Box::new(protocol),
-                    arg: Box::new(state),
+            arg: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::App {
+                    fun: protocol,
+                    arg: state,
                 }),
-                arg: Box::new(vector),
+                arg: vector,
             }),
-        })
+        }))
     }
 
-    fn eval_f38(&self, protocol: AstNode, tuple3: AstNode, _env: &Env) -> Result<AstNode, Error> {
-        Ok(AstNode::App {
-            fun: Box::new(AstNode::App {
-                fun: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                        arg: Box::new(tuple3.clone()),
+    fn eval_f38(&self, protocol: Rc<AstNode>, tuple3: Rc<AstNode>, _env: &Env) -> Result<Rc<AstNode>, Error> {
+        Ok(Rc::new(AstNode::App {
+            fun: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), }),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                        arg: tuple3.clone(),
                     }),
                 }),
-                arg: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
-                        arg: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                                arg: Box::new(AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                    arg: Box::new(tuple3.clone()),
+                arg: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                        arg: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                                arg: Rc::new(AstNode::App {
+                                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                    arg: tuple3.clone(),
                                 }),
                             }),
                         }),
                     }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::MultipleDraw)), }),
-                                arg: Box::new(AstNode::App {
-                                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                                    arg: Box::new(AstNode::App {
-                                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                        arg: Box::new(AstNode::App {
-                                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                            arg: Box::new(tuple3.clone()),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::MultipleDraw)), }),
+                                arg: Rc::new(AstNode::App {
+                                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                                    arg: Rc::new(AstNode::App {
+                                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                        arg: Rc::new(AstNode::App {
+                                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                            arg: tuple3.clone(),
                                         }),
                                     }),
                                 }),
                             }),
                         }),
-                        arg: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                        arg: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), }),
                     }),
                 }),
             }),
-            arg: Box::new(AstNode::App {
-                fun: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), }),
-                        arg: Box::new(protocol),
+            arg: Rc::new(AstNode::App {
+                fun: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), }),
+                        arg: protocol,
                     }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
-                        arg: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                arg: Box::new(tuple3.clone()),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), }),
+                        arg: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                arg: tuple3.clone(),
                             }),
                         }),
                     }),
                 }),
-                arg: Box::new(AstNode::App {
-                    fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Send)), }),
-                    arg: Box::new(AstNode::App {
-                        fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
-                        arg: Box::new(AstNode::App {
-                            fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                            arg: Box::new(AstNode::App {
-                                fun: Box::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
-                                arg: Box::new(tuple3),
+                arg: Rc::new(AstNode::App {
+                    fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Send)), }),
+                    arg: Rc::new(AstNode::App {
+                        fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }),
+                        arg: Rc::new(AstNode::App {
+                            fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                            arg: Rc::new(AstNode::App {
+                                fun: Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }),
+                                arg: tuple3,
                             }),
                         }),
                     }),
                 }),
             }),
-        })
+        }))
     }
 }
 
@@ -1743,7 +1818,7 @@ fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
 enum EvalOp {
     Num { number: EncodedNumber, },
     Fun(EvalFun),
-    Abs(AstNode),
+    Abs(Rc<AstNode>),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1777,28 +1852,28 @@ pub enum EvalFunFun {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EvalFunAbs {
     True0,
-    True1 { captured: AstNode, },
+    True1 { captured: Rc<AstNode>, },
     False0,
-    False1 { captured: AstNode, },
+    False1 { captured: Rc<AstNode>, },
     I0,
     C0,
-    C1 { x: AstNode, },
-    C2 { x: AstNode, y: AstNode, },
+    C1 { x: Rc<AstNode>, },
+    C2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     B0,
-    B1 { x: AstNode, },
-    B2 { x: AstNode, y: AstNode, },
+    B1 { x: Rc<AstNode>, },
+    B2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     S0,
-    S1 { x: AstNode, },
-    S2 { x: AstNode, y: AstNode, },
+    S1 { x: Rc<AstNode>, },
+    S2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     Cons0,
-    Cons1 { x: AstNode, },
-    Cons2 { x: AstNode, y: AstNode, },
+    Cons1 { x: Rc<AstNode>, },
+    Cons2 { x: Rc<AstNode>, y: Rc<AstNode>, },
     Car0,
     Cdr0,
     Nil0,
     IsNil0,
     IfZero1 { cond: EncodedNumber, },
-    IfZero2 { cond: EncodedNumber, true_clause: AstNode, },
+    IfZero2 { cond: EncodedNumber, true_clause: Rc<AstNode>, },
     Draw0,
     MultipleDraw0,
     Send0,
@@ -1806,10 +1881,10 @@ pub enum EvalFunAbs {
     Dem0,
     Modem0,
     Interact0,
-    Interact1 { protocol: AstNode, },
-    Interact2 { protocol: AstNode, state: AstNode, },
+    Interact1 { protocol: Rc<AstNode>, },
+    Interact2 { protocol: Rc<AstNode>, state: Rc<AstNode>, },
     F38_0,
-    F38_1 { protocol: AstNode, },
+    F38_1 { protocol: Rc<AstNode>, },
     Render0,
 }
 
@@ -1881,9 +1956,9 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::Galaxy)) =>
                 unreachable!(), // should be renamed to variable with name "-1"
             Op::Const(Const::Picture(picture)) =>
-                EvalOp::Abs(AstNode::Literal { value: Op::Const(Const::Picture(picture)), }),
+                EvalOp::Abs(Rc::new(AstNode::Literal { value: Op::Const(Const::Picture(picture)), })),
             Op::Variable(var) =>
-                EvalOp::Abs(AstNode::Literal { value: Op::Variable(var), }),
+                EvalOp::Abs(Rc::new(AstNode::Literal { value: Op::Variable(var), })),
             Op::Const(Const::Fun(Fun::Checkerboard)) =>
                 unimplemented!(),
             Op::Const(Const::Fun(Fun::F38)) =>
@@ -2127,9 +2202,9 @@ impl EvalOp {
 }
 
 impl AstNode {
-    pub fn render(self) -> Ops {
+    pub fn render(self: Rc<AstNode>) -> Ops {
         enum State {
-            RenderAppFun { arg: AstNode, },
+            RenderAppFun { arg: Rc<AstNode>, },
             RenderAppArg,
         }
 
@@ -2137,13 +2212,13 @@ impl AstNode {
         let mut ast_node = self;
         let mut stack = vec![];
         loop {
-            match ast_node {
+            match &*ast_node {
                 AstNode::Literal { value, } =>
-                    ops.push(value),
+                    ops.push(value.clone()),
                 AstNode::App { fun, arg, } => {
                     ops.push(Op::App);
-                    stack.push(State::RenderAppFun { arg: *arg, });
-                    ast_node = *fun;
+                    stack.push(State::RenderAppFun { arg: arg.clone(), });
+                    ast_node = fun.clone();
                     continue;
                 },
             }

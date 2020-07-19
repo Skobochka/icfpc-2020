@@ -54,9 +54,9 @@ pub enum OuterRequest {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Error {
     NoAppFunProvided,
-    NoAppArgProvided { fun: Rc<AstNode>, },
+    NoAppArgProvided { fun: Ops, },
     EvalEmptyTree,
-    AppOnNumber { number: EncodedNumber, arg: Rc<AstNode>, },
+    AppOnNumber { number: EncodedNumber, arg: Ops, },
     AppExpectsNumButFunProvided { fun: EvalFun, },
     TwoNumbersOpInDifferentModulation { number_a: EncodedNumber, number_b: EncodedNumber, },
     DivisionByZero,
@@ -65,7 +65,7 @@ pub enum Error {
     DemOnDemodulatedNumber { number: EncodedNumber, },
     ListNotClosed,
     ListCommaWithoutElement,
-    ListSyntaxUnexpectedNode { node: Rc<AstNode>, },
+    ListSyntaxUnexpectedNode { node: Ops, },
     ListSyntaxSeveralCommas,
     ListSyntaxClosingAfterComma,
     InvalidCoordForDrawArg,
@@ -200,7 +200,7 @@ impl Interpreter {
                         break;
                     },
                     (Some(State::AwaitAppArg { fun, }), None) =>
-                        return Err(Error::NoAppArgProvided { fun, }),
+                        return Err(Error::NoAppArgProvided { fun: fun.render(), }),
                     (Some(State::AwaitAppArg { fun, }), Some(node)) => {
                         maybe_node = Some(AstNode::App {
                             fun: fun,
@@ -231,7 +231,7 @@ impl Interpreter {
                             value: Op::Const(Const::Fun(Fun::Nil)),
                         }),
                     (Some(State::ListContinue), Some(node)) =>
-                        return Err(Error::ListSyntaxUnexpectedNode { node: Rc::new(node), }),
+                        return Err(Error::ListSyntaxUnexpectedNode { node: Rc::new(node).render(), }),
                     (Some(State::ListContinueComma), None) =>
                         return Err(Error::ListNotClosed),
                     (Some(State::ListContinueComma), Some(AstNode::Literal { value: Op::Syntax(Syntax::Comma), })) =>
@@ -335,7 +335,7 @@ impl Interpreter {
                         return Ok(eval_op.render()),
 
                     (Some(State::EvalAppFun { arg, }), EvalOp::Num { number, }) =>
-                        return Err(Error::AppOnNumber { number, arg, }),
+                        return Err(Error::AppOnNumber { number, arg: arg.render(), }),
 
                     (Some(State::EvalAppFun { arg, }), EvalOp::Fun(EvalFun::ArgNum(fun))) => {
                         states.push(State::EvalAppArgNum { fun, });

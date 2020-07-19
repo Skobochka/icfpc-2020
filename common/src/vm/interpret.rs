@@ -137,6 +137,12 @@ impl Interpreter {
         }
     }
 
+    pub fn with_outer_channel(outer_channel: UnboundedSender<OuterRequest>) -> Interpreter {
+        Interpreter {
+            outer_channel: Some(outer_channel),
+        }
+    }
+
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
         enum State {
             AwaitAppFun,

@@ -15,6 +15,28 @@ use piston::{
     keyboard::Key,
 };
 
+use tokio::{self,runtime::Runtime};
+use futures::{
+    channel::{
+        oneshot,
+        mpsc::unbounded,
+    },
+    StreamExt,
+};
+
+use common::{
+    vm::interpret::{
+        Interpreter,
+        OuterRequest,
+    },
+    proto::{
+        galaxy,
+        Session,
+    },
+    send::Intercom,
+    code::{Op,Ops,Picture,Coord,EncodedNumber,Const,Number,PositiveNumber,NegativeNumber},
+};
+
 
 const GRAY: [f32; 4] = [0.2, 0.2, 0.2, 1.0];
 
@@ -33,7 +55,7 @@ use crate::{
 };
 use main_screen::MainScreen;
 
-
+#[derive(Debug)]
 pub struct Data {
     pub(crate) data: Vec<[f64; 2]>,
 }
@@ -60,8 +82,59 @@ fn tmp_data(dx: f64, dy: f64) -> Data {
     }
 }
 
+impl Data {
+    fn from_ops(ops: Ops) -> Option<Data> {     
+        for o in ops.0 {
+            if let Op::Const(Const::Picture(Picture{ points })) = o {
+                let mut v = Vec::new();
+                for p in points {
+                    let (x,y) = match p {
+                        Coord { x: EncodedNumber { number: x, .. }, y: EncodedNumber { number: y, .. } } => {
+                            (match x {
+                                Number::Positive(PositiveNumber{ value }) => value as f64,
+                                Number::Negative(NegativeNumber{ value }) => value as f64,
+                            },match y {
+                                Number::Positive(PositiveNumber{ value }) => value as f64,
+                                Number::Negative(NegativeNumber{ value }) => value as f64,
+                            })
+                        },
+                    };
+                    v.push([x as f64, y as f64]);
+                }
+                return Some(Data{ data: v });
+            }
+        }
+        None
+    }
+
+}
+
+fn asm_to_opt_data(session: &mut Session, asm: &str) -> Option<Data> {
+    match session.eval_asm(asm) {
+        Ok(ops) => Data::from_ops(ops),
+        Err(e) => {
+            println!("Error: {:?}",e);
+            None
+        },
+    }
+}
+
+
 fn main() {
-    let data = Data{ data: vec![] };
+    let mut session = match session() {
+        Ok(s) => s,
+        Err(e) => {
+            println!("Failed to create VM: {:?}",e);
+            std::process::exit(1);
+        },
+    };
+
+    let init_asm = "ap draw ((1,1),(2,10))";
+    
+    let init_data = match asm_to_opt_data(&mut session, init_asm) {
+        Some(data) => data,
+        None => Data{ data: vec![] }, 
+    };
     
     let opengl = OpenGL::V3_2;
 
@@ -98,7 +171,7 @@ fn main() {
         size: (1280.0,800.0),
         glc: glc,
         cursor: Cursor::new(0.0,0.0),
-        main: MainScreen::new(&data,&cntx),
+        main: MainScreen::new(&init_data,&cntx),
     };
     app.cursor(cursor);
     
@@ -138,13 +211,10 @@ fn main() {
                     app.cursor(cursor);
                     {
                         let coo = app.main.scene.get_cursor().cursor;
-                        let data = tmp_data(coo[0],coo[1]);
-                        app.main.scene.map.next_data(&data);
-                        
-                        // TODO some click processing
-                        // app.main.scene.get_cursor() - cursor in galaxy coordinates
-
-                        
+                        let asm = format!("ap draw (({},{}))",coo[0],coo[1]);
+                        if let Some(data) = asm_to_opt_data(&mut session, &asm) {
+                            app.main.scene.map.next_data(&data);
+                        }
                         //println!("Click: {:?}",app.main.scene.get_cursor());
                     }
                     cursor.state = CursorState::None;
@@ -457,4 +527,40 @@ impl<'t> App<'t> {
     }
 }
 
+fn session() -> Result<Session,common::proto::Error> {
+    let (outer_tx, mut outer_rx) = unbounded();
+
+    let mut session = Session::with_interpreter(
+        galaxy(),
+        Interpreter::with_outer_channel(outer_tx),
+    )?;
+
+    std::thread::spawn(move || {
+        let intercom = Intercom::proxy();
+        let mut runtime = Runtime::new().unwrap();
+        runtime.block_on(async {
+            while let Some(request) = outer_rx.next().await {
+                match request {
+                    OuterRequest::ProxySend { modulated_req, modulated_rep, } => {
+                        match intercom.async_send(modulated_req).await {
+                            Ok(response) => {
+                                if let Err(..) = modulated_rep.send(response) {
+                                    println!("interpreter has gone, quitting");
+                                    break;
+                                }
+                            },
+                            Err(error) => {
+                                println!("intercom send failed: {:?}, quitting", error);
+                                break;
+                            },
+                        }
+                    },
+                }
+            }
+        });
+        println!("intercom task termination");
+    });
+    
+    Ok(session)
+}
 

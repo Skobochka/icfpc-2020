@@ -1,3 +1,10 @@
+use super::encoder::{
+    ConsList,
+    Modulable,
+    Error as EncoderError,
+};
+
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Vec2 {
     pub x: isize,
@@ -68,11 +75,53 @@ pub struct GameRound {
 
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Error {
+    ParsingError(EncoderError),
+    ServerErrorReply,
+}
+
 impl GameRound {
     pub fn new(player_key: &str) -> GameRound {
         GameRound {
             player_key: usize::from_str_radix(player_key, 10).unwrap(),
             last_response: None,
         }
+    }
+
+    pub fn parse_game_state(resp: &ConsList) -> Result<GameState, Error> {
+        unimplemented!()
+    }
+
+    pub fn parse_static_game_info(resp: &ConsList) -> Result<GameStaticInfo, Error> {
+        unimplemented!()
+    }
+
+    pub fn parse_game_resonse_from_string(input: &str) -> Result<GameResponse, Error> {
+        let resp = ConsList::demodulate_from_string(input).map_err(|e| Error::ParsingError(e))?;
+
+        GameRound::parse_game_response(&resp)
+    }
+
+    pub fn parse_game_response(resp: &ConsList) -> Result<GameResponse, Error> {
+        let status = resp.car().as_encoded_number().as_isize();
+        if status != 1 {
+            return Err(Error::ServerErrorReply)
+        }
+
+        let stage_int = resp.cdr().as_cons().car().as_encoded_number().as_isize();
+        let static_info = GameRound::parse_static_game_info(resp.cdr().as_cons().cdr().as_cons().car().as_cons())?;
+        let state = GameRound::parse_game_state(resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().car().as_cons())?;
+
+        Ok(GameResponse {
+            stage: match stage_int {
+                0 => GameStage::NotStarted,
+                1 => GameStage::Started,
+                2 => GameStage::Finished,
+                _ => unreachable!(),
+            },
+            state,
+            static_info,
+        })
     }
 }

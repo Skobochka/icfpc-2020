@@ -1,47 +1,49 @@
 
 use std::io::{
-    self,BufReader,Read,
+    BufReader,BufRead,Write,
 };
 
-use common::{
-    proto,
-    code::*,
-    parser::{self,AsmParser},
-    vm::interpret::{Interpreter,self},
-};
+use common::proto::{Session,Error};
 
-#[derive(Debug)]
-enum Error {
-    Read(io::Error),
-    Parse(parser::Error),
-    Vm(interpret::Error),
-}
 
 fn main() -> Result<(),Error> {
-    let script = AsmParser.parse_script(proto::galaxy()).map_err(Error::Parse)?;
-    let inter = Interpreter{};
-    let env = inter.eval_script(script).map_err(Error::Vm)?;
-    let oops = inter.eval(
-        inter.build_tree(Ops(vec![
-            Op::App,
-            // this is "galaxy"
-            Op::Variable(Variable {
-                name: Number::Negative(NegativeNumber {
-                    value: -1,
-                }),
-            }),
-            Op::Const(Const::EncodedNumber(EncodedNumber {
-                number: Number::Positive(PositiveNumber {
-                    value: 0,
-                }),
-                modulation: Modulation::Demodulated,
-            })),
-        ])).map_err(Error::Vm)?,
-        &env,
-    ).map_err(Error::Vm)?;
+    let mut session = Session::galaxy()?;
 
-    println!("{:#?}",oops);
-    //Const(Fun(Galaxy))
-
+    println!("Enter a command to run\nFor example: ap galaxy 0\nOr 'exit' to exit...\n");
+    print!(">>> "); std::io::stdout().flush().ok();
+    for row in BufReader::new(std::io::stdin()).lines() {
+        let asm = match row {
+            Err(e) => {
+                println!("Read error: {:?}\n",e);
+                print!(">>> "); std::io::stdout().flush().ok();
+                continue;
+            },
+            Ok(asm) => asm,
+        };
+        match &asm[..] {
+            "exit" => {
+                println!("Bye...");
+                return Ok(());
+            },
+            "" => {
+                print!(">>> "); std::io::stdout().flush().ok();
+                continue;
+            },
+            _ => {},
+        }
+        match session.eval_asm(&asm) {
+            Ok(ops) => {
+                println!("Ok:");
+                for op in ops.0 {
+                    println!("   {:?}",op);
+                }
+                println!("");
+            },
+            Err(e) => {
+                println!("Error: {:?}",e);
+            },
+        }
+        print!(">>> "); std::io::stdout().flush().ok();
+    }
     Ok(())
 }

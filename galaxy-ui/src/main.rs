@@ -148,7 +148,6 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
         Op::App, Op::App, Op::App,
         Op::Const(Const::Fun(Fun::Interact)),
         Op::Const(Const::Fun(Fun::Galaxy)),
-        //Op::Const(Const::Fun(Fun::Nil)),
         Op::App, Op::Const(Const::Fun(Fun::Car)),
     ]; 
     nops.extend(ops.0.into_iter());
@@ -191,11 +190,16 @@ fn main() {
     };
 
     let init_asm = "ap ap ap interact galaxy nil ap ap vec 0 0";
-    //ap render ap car ap cdr 
+    //ap render ap car ap cdr
+    let t = std::time::Instant::now();
     let mut current = asm(&mut session,init_asm);
+    println!("First step:   {:?}",t.elapsed());
     if let Some(ops) = &current {
+        let t = std::time::Instant::now();
         render(&mut session,ops);
+        println!("     render: {:?}",t.elapsed());
     }
+                                
     
     let opengl = OpenGL::V3_2;
 

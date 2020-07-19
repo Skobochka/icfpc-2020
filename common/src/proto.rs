@@ -1,7 +1,12 @@
 use crate::{
     code::Ops,
     parser::{self,AsmParser},
-    vm::interpret::{self,Env,Interpreter},
+    vm::interpret::{
+        self,
+        Env,
+        Interpreter,
+        Cache,
+    },
 };
 
 mod galaxy;
@@ -18,6 +23,7 @@ pub enum Error {
 
 pub struct Session {
     inter: Interpreter,
+    cache: Cache,
     env: Env,
 }
 impl Session {
@@ -34,6 +40,7 @@ impl Session {
         let env = inter.eval_script(script).map_err(Error::Vm)?;
         Ok(Session {
             inter: inter,
+            cache: Cache::new(),
             env: env,
         })
     }
@@ -42,9 +49,10 @@ impl Session {
         self.eval_ops(AsmParser.parse_expression(&asm).map_err(Error::Parse)?)
     }
     pub fn eval_ops(&mut self, ops: Ops) -> Result<Ops,Error> {
-        let result_ops = self.inter.eval(
+        let result_ops = self.inter.eval_cache(
             self.inter.build_tree(ops).map_err(Error::Vm)?,
             &self.env,
+            &mut self.cache,
         ).map_err(Error::Vm)?;
 
         self.env.add_equality(

@@ -1,5 +1,6 @@
 use super::{
     Env,
+    Cache,
     Interpreter,
     Op,
     Ops,
@@ -30,6 +31,7 @@ fn encode() {
                 Op::Syntax(Syntax::RightParen),
             ]),
             &Env::new(),
+            &mut Cache::new(),
         ).unwrap(),
         ListVal::Cons(Box::new(ConsList::Nil)),
     );
@@ -47,6 +49,7 @@ fn encode() {
                 Op::Syntax(Syntax::RightParen),
             ]),
             &Env::new(),
+            &mut Cache::new(),
         ).unwrap(),
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Number(EncodedNumber {
@@ -77,6 +80,7 @@ fn encode() {
                 Op::Syntax(Syntax::RightParen),
             ]),
             &Env::new(),
+            &mut Cache::new(),
         ).unwrap(),
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Number(EncodedNumber {
@@ -115,6 +119,7 @@ fn encode() {
                 Op::Syntax(Syntax::RightParen),
             ]),
             &Env::new(),
+            &mut Cache::new(),
         ).unwrap(),
         ListVal::Cons(Box::new(ConsList::Cons(
             ListVal::Number(EncodedNumber {
@@ -161,7 +166,7 @@ fn decode() {
         ))),
     )));
     assert_eq!(
-        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new()).unwrap(),
+        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new(), &mut Cache::new()).unwrap(),
         cons_list,
     );
 
@@ -181,7 +186,7 @@ fn decode() {
             ListVal::Cons(Box::new(ConsList::Nil))))),
     )));
     assert_eq!(
-        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new()).unwrap(),
+        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new(), &mut Cache::new()).unwrap(),
         cons_list,
     );
 }

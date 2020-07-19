@@ -1,6 +1,7 @@
 use super::{
     Env,
     Ast,
+    Cache,
     AstNode,
     Error,
     Interpreter,

@@ -12,10 +12,11 @@ indexmap
 .. |docs| image:: https://docs.rs/indexmap/badge.svg
 .. _docs: https://docs.rs/indexmap
 
-.. |rustc| image:: https://img.shields.io/badge/rust-1.32%2B-orange.svg
-.. _rustc: https://img.shields.io/badge/rust-1.32%2B-orange.svg
+.. |rustc| image:: https://img.shields.io/badge/rust-1.18%2B-orange.svg
+.. _rustc: https://img.shields.io/badge/rust-1.18%2B-orange.svg
 
-A pure-Rust hash table which preserves (in a limited sense) insertion order.
+A safe, pure-Rust hash table which preserves (in a limited sense) insertion
+order.
 
 This crate implements compact map and set data-structures,
 where the iteration order of the keys is independent from their hash or
@@ -43,6 +44,11 @@ was indexmap, a hash table that has following properties:
 
   - It's the usual backwards shift deletion, but only on the index vector, so
     it's cheaper because it's moving less memory around.
+
+Does not implement (Yet)
+------------------------
+
+- ``.reserve()`` exists but does not have a complete implementation
 
 Performance
 -----------
@@ -79,25 +85,6 @@ which is roughly:
 
 Recent Changes
 ==============
-
-- 1.5.0
-
-  - **MSRV**: Rust 1.32 or later is now required.
-
-  - The inner hash table is now based on ``hashbrown`` by @cuviper in PR 131_.
-    This also completes the method ``reserve`` and adds ``shrink_to_fit``.
-
-  - Add new methods ``get_key_value``, ``remove_entry``, ``swap_remove_entry``,
-    and ``shift_remove_entry``, by @cuviper in PR 136_
-
-  - ``Clone::clone_from`` reuses allocations by @cuviper in PR 125_
-
-  - Add new method ``reverse`` by @linclelinkpart5 in PR 128_
-
-.. _125: https://github.com/bluss/indexmap/pull/125
-.. _128: https://github.com/bluss/indexmap/pull/128
-.. _131: https://github.com/bluss/indexmap/pull/131
-.. _136: https://github.com/bluss/indexmap/pull/136
 
 - 1.4.0
 

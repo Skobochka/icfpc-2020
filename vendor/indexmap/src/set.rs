@@ -63,45 +63,28 @@ type Bucket<T> = super::Bucket<T, ()>;
 /// assert!(letters.contains(&'u'));
 /// assert!(!letters.contains(&'y'));
 /// ```
+#[derive(Clone)]
 #[cfg(has_std)]
 pub struct IndexSet<T, S = RandomState> {
     map: IndexMap<T, (), S>,
 }
 #[cfg(not(has_std))]
+#[derive(Clone)]
 pub struct IndexSet<T, S> {
     map: IndexMap<T, (), S>,
-}
-
-impl<T, S> Clone for IndexSet<T, S>
-where
-    T: Clone,
-    S: Clone,
-{
-    fn clone(&self) -> Self {
-        IndexSet {
-            map: self.map.clone(),
-        }
-    }
-
-    fn clone_from(&mut self, other: &Self) {
-        self.map.clone_from(&other.map);
-    }
 }
 
 impl<T, S> Entries for IndexSet<T, S> {
     type Entry = Bucket<T>;
 
-    #[inline]
     fn into_entries(self) -> Vec<Self::Entry> {
         self.map.into_entries()
     }
 
-    #[inline]
     fn as_entries(&self) -> &[Self::Entry] {
         self.map.as_entries()
     }
 
-    #[inline]
     fn as_entries_mut(&mut self) -> &mut [Self::Entry] {
         self.map.as_entries_mut()
     }
@@ -213,18 +196,9 @@ where
         self.map.clear();
     }
 
-    /// Reserve capacity for `additional` more values.
-    ///
-    /// Computes in **O(n)** time.
+    /// FIXME Not implemented fully yet
     pub fn reserve(&mut self, additional: usize) {
         self.map.reserve(additional);
-    }
-
-    /// Shrink the capacity of the set as much as possible.
-    ///
-    /// Computes in **O(n)** time.
-    pub fn shrink_to_fit(&mut self) {
-        self.map.shrink_to_fit();
     }
 
     /// Insert the value into the set.
@@ -342,7 +316,7 @@ where
     where
         Q: Hash + Equivalent<T>,
     {
-        self.map.get_key_value(value).map(|(x, &())| x)
+        self.map.get_full(value).map(|(_, x, &())| x)
     }
 
     /// Return item index and value
@@ -451,7 +425,7 @@ where
     where
         Q: Hash + Equivalent<T>,
     {
-        self.map.swap_remove_entry(value).map(|(x, ())| x)
+        self.map.swap_remove_full(value).map(|(_, x, ())| x)
     }
 
     /// Removes and returns the value in the set, if any, that is equal to the
@@ -468,7 +442,7 @@ where
     where
         Q: Hash + Equivalent<T>,
     {
-        self.map.shift_remove_entry(value).map(|(x, ())| x)
+        self.map.shift_remove_full(value).map(|(_, x, ())| x)
     }
 
     /// Remove the value from the set return it and the index it had.
@@ -551,13 +525,6 @@ where
         IntoIter {
             iter: self.map.sorted_by(move |a, &(), b, &()| cmp(a, b)).iter,
         }
-    }
-
-    /// Reverses the order of the set’s values in place.
-    ///
-    /// Computes in **O(n)** time and **O(1)** space.
-    pub fn reverse(&mut self) {
-        self.map.reverse()
     }
 
     /// Clears the `IndexSet`, returning all values as a drain iterator.
@@ -1317,43 +1284,6 @@ mod tests {
         println!("{:?}", set);
         for &elt in &not_present {
             assert!(set.get(&elt).is_none());
-        }
-    }
-
-    #[test]
-    fn reserve() {
-        let mut set = IndexSet::<usize>::new();
-        assert_eq!(set.capacity(), 0);
-        set.reserve(100);
-        let capacity = set.capacity();
-        assert!(capacity >= 100);
-        for i in 0..capacity {
-            assert_eq!(set.len(), i);
-            set.insert(i);
-            assert_eq!(set.len(), i + 1);
-            assert_eq!(set.capacity(), capacity);
-            assert_eq!(set.get(&i), Some(&i));
-        }
-        set.insert(capacity);
-        assert_eq!(set.len(), capacity + 1);
-        assert!(set.capacity() > capacity);
-        assert_eq!(set.get(&capacity), Some(&capacity));
-    }
-
-    #[test]
-    fn shrink_to_fit() {
-        let mut set = IndexSet::<usize>::new();
-        assert_eq!(set.capacity(), 0);
-        for i in 0..100 {
-            assert_eq!(set.len(), i);
-            set.insert(i);
-            assert_eq!(set.len(), i + 1);
-            assert!(set.capacity() >= i + 1);
-            assert_eq!(set.get(&i), Some(&i));
-            set.shrink_to_fit();
-            assert_eq!(set.len(), i + 1);
-            assert_eq!(set.capacity(), i + 1);
-            assert_eq!(set.get(&i), Some(&i));
         }
     }
 

@@ -110,12 +110,22 @@ impl AsmParser {
                 Op::Const(Const::Fun(self.parse_func(inner_rules.next().unwrap())))
             },
             Rule::unnamed_func => {
-                let name: usize = expr.into_inner().next().unwrap().as_str().parse().unwrap();
-                Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: name })})
+                let name: isize = expr.into_inner().next().unwrap().as_str().parse().unwrap();
+                if name > 0 {
+                    Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: name as usize})})
+                }
+                else {
+                    Op::Variable(Variable { name: Number::Negative(NegativeNumber { value: name })})
+                }
             },
             Rule::variable => {
-                let name: usize = expr.into_inner().next().unwrap().as_str().parse().unwrap();
-                Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: name })})
+                let name: isize = expr.into_inner().next().unwrap().as_str().parse().unwrap();
+                if name > 0 {
+                    Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: name as usize })})
+                }
+                else {
+                    Op::Variable(Variable { name: Number::Negative(NegativeNumber { value: name })})
+                }
             },
             Rule::ap_func => Op::App,
             Rule::left_paren => Op::Syntax(Syntax::LeftParen),
@@ -601,6 +611,39 @@ mod tests {
                     Statement::Equality(Equality {
                         left: Ops(vec![
                             Op::Variable(Variable { name: Number::Positive(PositiveNumber { value: 1234 })})
+                        ]),
+                        right: Ops(vec![
+                            Op::Const(Const::Fun(Fun::Inc))
+                        ]),
+                    }),
+                ],
+            }));
+    }
+
+    #[test]
+    fn negative_unnamed_functions_and_variables() {
+        let parser = AsmParser::new();
+        assert_eq!(
+            parser.parse_script("x-1 = inc"),
+            Ok(Script {
+                statements: vec![
+                    Statement::Equality(Equality {
+                        left: Ops(vec![
+                            Op::Variable(Variable { name: Number::Negative(NegativeNumber { value: -1 })})
+                        ]),
+                        right: Ops(vec![
+                            Op::Const(Const::Fun(Fun::Inc))
+                        ]),
+                    }),
+                ],
+            }));
+        assert_eq!(
+            parser.parse_script(":-1 = inc"),
+            Ok(Script {
+                statements: vec![
+                    Statement::Equality(Equality {
+                        left: Ops(vec![
+                            Op::Variable(Variable { name: Number::Negative(NegativeNumber { value: -1 })})
                         ]),
                         right: Ops(vec![
                             Op::Const(Const::Fun(Fun::Inc))

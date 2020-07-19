@@ -1,17 +1,11 @@
 use std::env;
-use std::process;
 use tokio::runtime::Runtime;
-
 
 use common::send::{
     Intercom,
 };
 
 use common::code::{
-    EncodedNumber,
-    PositiveNumber,
-    Modulation,
-    Number,
     make_mod_number,
 };
 
@@ -101,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server_url = &args[1];
     let player_key = &args[2];
 
-    let intercom = Intercom::new(server_url.clone());
+    let intercom = Intercom::new(format!("{}/aliens/send", server_url));
     let mut runtime = Runtime::new().unwrap();
     
     let join_request = make_join_request(player_key);

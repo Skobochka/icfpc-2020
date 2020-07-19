@@ -4,6 +4,7 @@ use super::{
     AstNode,
     Error,
     Interpreter,
+    EvalOp,
     EvalFun,
     EvalFunNum,
     super::super::{
@@ -103,7 +104,7 @@ fn ast_tree_basic() {
         interpreter.build_tree(
             Ops(vec![Op::App, Op::Const(Const::Fun(Fun::Inc))]),
         ),
-        Err(Error::NoAppArgProvided { fun: std::rc::Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), }), }),
+        Err(Error::NoAppArgProvided { fun: std::rc::Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), }).render(), }),
     );
 }
 
@@ -178,7 +179,7 @@ fn eval_basic() {
                         value: 1,
                     }),
                 }),
-            }),
+            }).render(),
         }),
     );
 }

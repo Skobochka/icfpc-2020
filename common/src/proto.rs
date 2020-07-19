@@ -42,9 +42,17 @@ impl Session {
         self.eval_ops(AsmParser.parse_expression(&asm).map_err(Error::Parse)?)
     }
     pub fn eval_ops(&mut self, ops: Ops) -> Result<Ops,Error> {
-        self.inter.eval(
+        let result_ops = self.inter.eval(
             self.inter.build_tree(ops).map_err(Error::Vm)?,
             &self.env,
-        ).map_err(Error::Vm)
+        ).map_err(Error::Vm)?;
+
+        self.env.add_equality(
+            self.inter.make_prev_variable_ast(),
+            self.inter.build_tree(result_ops.clone())
+                .map_err(Error::Vm)?,
+        );
+
+        Ok(result_ops)
     }
 }

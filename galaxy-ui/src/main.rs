@@ -132,7 +132,7 @@ fn render(session: &mut Session, ops: &Ops) {
         Op::App, Op::Const(Const::Fun(Fun::Render)),
         Op::App, Op::Const(Const::Fun(Fun::Car)),
         Op::App, Op::Const(Const::Fun(Fun::Cdr)),
-    ]; 
+    ];
     nops.extend(ops.0.iter().map(|o|o.clone()));
     match session.eval_ops(Ops(nops)) {
         Ok(_) => {},
@@ -149,7 +149,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
         Op::Const(Const::Fun(Fun::Interact)),
         Op::Const(Const::Fun(Fun::Galaxy)),
         Op::App, Op::Const(Const::Fun(Fun::Car)),
-    ]; 
+    ];
     nops.extend(ops.0.into_iter());
     nops.extend(vec![
         Op::App, Op::App, Op::Const(Const::Fun(Fun::Vec)),
@@ -199,8 +199,8 @@ fn main() {
         render(&mut session,ops);
         println!("     render: {:?}",t.elapsed());
     }
-                                
-    
+
+
     let opengl = OpenGL::V3_2;
 
     let mut window: Window = WindowSettings::new("View", [1280, 800])
@@ -214,10 +214,10 @@ fn main() {
     let mut cursor = Cursor::new(640.0,400.0);
     window.ctx.window().set_cursor_position((640.0,400.0).into()).unwrap();
     //window.ctx.window().hide_cursor(true);
-    
+
     let mut glc = GlContext {
         gl: GlGraphics::new(opengl),
-        glyphs: GlyphCache::new("/Library/Fonts/Tahoma.ttf",(),TextureSettings::new()).unwrap(),
+        glyphs: GlyphCache::new("/System/Library/Fonts/Supplemental/Tahoma.ttf",(),TextureSettings::new()).unwrap(),
     };
 
     let ups = 10;
@@ -285,7 +285,7 @@ fn main() {
                         //let nasm = "ap render ap car ap cdr ap ap ap interact galaxy ap ap cons 0 ap ap cons ap ap cons 0 nil ap ap cons 0 ap ap cons nil nil ap ap vec 0 0";
                         //asm(&mut session, nasm);
 
-                        
+
                         if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
                             current = next(&mut session, ops, coo[0] as i64, coo[1] as i64);
@@ -300,7 +300,7 @@ fn main() {
                         //println!("Click: {:?}",app.main.scene.get_cursor());
                     }
                     cursor.state = CursorState::None;
-                },   
+                },
                 _ => { /*println!("{:?}",button);*/ },
             },
             Event::Input(Input::Button(ButtonArgs { state: ButtonState::Press, button, .. }),_) => match button {
@@ -330,7 +330,7 @@ pub struct Scene {
     top: f64,
     width: f64,
     height: f64,
-    
+
     ratio: (f64,f64),
     transform: [[f64; 3]; 2],
     back_transform: [[f64; 3]; 2],
@@ -339,7 +339,7 @@ pub struct Scene {
     cursor: Cursor,
 
     map: Map,
-    
+
     chess: Vec<[f64; 4]>,
 }
 impl Scene {
@@ -360,7 +360,7 @@ impl Scene {
             cursor: Cursor::new(0.0,0.0),
 
             map: Map::new(data),
-            
+
             chess: {
                 let r = 72.0;
                 let ratio = (ratio.0 * r, ratio.1 * r);
@@ -413,7 +413,7 @@ impl Scene {
     fn move_map(&mut self, mut tmp: [f64; 2]) {
         let current = self.current_map_size();
         if (current.size_x.1 - tmp[0]) > self.map.size.size_x.1 { tmp[0] = -self.map.size.size_x.1 + current.size_x.1 }
-        if (current.size_x.0 - tmp[0]) < self.map.size.size_x.0 { tmp[0] = -self.map.size.size_x.0 + current.size_x.0 }                          
+        if (current.size_x.0 - tmp[0]) < self.map.size.size_x.0 { tmp[0] = -self.map.size.size_x.0 + current.size_x.0 }
         if (current.size_y.0 - tmp[1]) < self.map.size.size_y.0 { tmp[1] = -self.map.size.size_y.0 + current.size_y.0 }
         if (current.size_y.1 - tmp[1]) > self.map.size.size_y.1 { tmp[1] = -self.map.size.size_y.1 + current.size_y.1 }
         let old_transform = self.transform;
@@ -425,15 +425,15 @@ impl Scene {
         let ws = self.scale * (self.map.size.size_x.1 - self.map.size.size_x.0)/(current.size_x.1 - current.size_x.0);
         let hs = self.scale * (self.map.size.size_y.1 - self.map.size.size_y.0)/(current.size_y.1 - current.size_y.0);
         let max_scale = f64::min(f64::min(ws,hs),100.0);
-                                
+
         if (self.scale + tmp) > max_scale { tmp = max_scale - self.scale; }
         let pscale = self.scale;
         self.scale += tmp;
-        if self.scale < 1.0 { self.scale = 1.0; }                           
+        if self.scale < 1.0 { self.scale = 1.0; }
         if self.scale > max_scale { self.scale = max_scale; }
         let old_transform = self.transform;
-        self.transform = self.transform.scale(pscale/self.scale,pscale/self.scale);   
-        self.back_transform = math::multiply(DrawContext::reverse(self.transform),math::multiply(old_transform,self.back_transform));                            
+        self.transform = self.transform.scale(pscale/self.scale,pscale/self.scale);
+        self.back_transform = math::multiply(DrawContext::reverse(self.transform),math::multiply(old_transform,self.back_transform));
         self.move_map([0.0; 2])
     }
 }
@@ -446,23 +446,23 @@ impl DrawControl for Scene {
         let mut ds = c.draw_state;
         ds.scissor = Some(c.scissor(self.left,self.top,self.width,self.height));
 
-        //self.back_transform = math::multiply(DrawContext::reverse(self.transform),c.transform);       
+        //self.back_transform = math::multiply(DrawContext::reverse(self.transform),c.transform);
 
         let tr = math::multiply(DrawContext::reverse(c.transform),self.transform);
 
         // Draws chess background
-        /*let t = c.transform.trans(self.left,self.top).scale(self.width,self.height);      
+        /*let t = c.transform.trans(self.left,self.top).scale(self.width,self.height);
         for r in &self.chess {
             rectangle([1.0, 1.0, 0.0, 0.05], *r, t, &mut glc.gl);
         }*/
 
-        // Draws scale-rect in the center on the map 
+        // Draws scale-rect in the center on the map
         /*
         let r = Rectangle::new([0.5,0.5,0.5,0.5]);
         r.draw([-1.0,-1.0,2.0,2.0],&ds,self.transform,&mut glc.gl);
         let r = Rectangle::new([1.0,1.0,1.0,1.0]);
         r.draw([-0.01,-0.01,0.02,0.02],&ds,self.transform,&mut glc.gl);
-        
+
         Text::new_color([1.0,1.0,1.0,1.0],12).draw(&format!("({},{})",0.0,0.0),&mut glc.glyphs,&ds,
                                                    c.transform.trans_pos(math::transform_pos(tr,[0.0,0.0]))
                                                    ,&mut glc.gl).unwrap();
@@ -471,12 +471,12 @@ impl DrawControl for Scene {
                                                    c.transform.trans_pos(math::transform_pos(tr,[-1.0,1.0]))
                                                    ,&mut glc.gl).unwrap();
         */
-        
+
         // Map draw
         let mut map_c = *c;
         map_c.transform = self.transform;
         map_c.draw_state = ds;
-        
+
         let current = self.current_map_size();
         self.map.current_view = current;
         self.map.draw(&map_c,glc);
@@ -494,14 +494,14 @@ impl DrawControl for Scene {
             r.draw([x1,y1,x2-x1,y2-y1],&ds,self.transform,&mut glc.gl);
         }
     }
-    
+
     fn cursor(&mut self, mut cursor: Cursor) -> CursorAction {
         let cur = cursor.cursor;
         if (cur[0] >= self.left)&&((cur[0] <= (self.left+self.width)))&&
             (cur[1] >= self.top)&&((cur[1] <= (self.top+self.height))) {
                 cursor.transform(self.back_transform);
                 self.cursor = cursor;
-                
+
                 match cursor.scroll_to_scale {
                     false => if DrawContext::l1_norm(cursor.scroll) > 0.005 {
                         self.move_map(math::mul_scalar(cursor.scroll,1.5));
@@ -525,14 +525,14 @@ impl DrawControl for Scene {
 }
 
 pub struct GlContext<'t> {
-    pub gl: GlGraphics, 
+    pub gl: GlGraphics,
     pub glyphs: GlyphCache<'t>,
 }
 
 pub struct App<'t> {
     size: (f64,f64),
     glc: GlContext<'t>,
-    
+
     cursor: Cursor,
     main: MainScreen,
 }
@@ -542,7 +542,7 @@ fn init_render<W: WindowTrait>(args: &RenderArgs, glc: &mut GlContext, window: &
         let c = glc.gl.draw_begin(view);
         let x = view.window_size[0]/1440.0;
         let y = view.window_size[1]/900.0;
-        
+
         let m = math::scale(x,y);
         DrawContext {
             screen_size: (1440.0,900.0),
@@ -550,9 +550,9 @@ fn init_render<W: WindowTrait>(args: &RenderArgs, glc: &mut GlContext, window: &
             view: c.view,
             transform: c.transform.scale(x,y),
             draw_state: c.draw_state,
-            
+
             original_transform: c.transform.scale(x,y),
-            
+
             screen: m,
             screen_back: DrawContext::reverse(m),
         }
@@ -563,7 +563,7 @@ fn init_render<W: WindowTrait>(args: &RenderArgs, glc: &mut GlContext, window: &
     c
 }
 impl<'t> App<'t> {
-    fn render<W: WindowTrait>(&mut self, args: &RenderArgs, window: &mut W) {        
+    fn render<W: WindowTrait>(&mut self, args: &RenderArgs, window: &mut W) {
         let view = args.viewport();
         self.size = (view.window_size[0],view.window_size[1]);
         let c = {
@@ -580,15 +580,15 @@ impl<'t> App<'t> {
                 draw_state: c.draw_state,
 
                 original_transform: c.transform.scale(x,y),
-                
+
                 screen: m,
                 screen_back: DrawContext::reverse(m),
             }
         };
-        
+
         {
-            clear(GRAY,&mut self.glc.gl);           
-            self.main.draw(&c,&mut self.glc);          
+            clear(GRAY,&mut self.glc.gl);
+            self.main.draw(&c,&mut self.glc);
         }
         /*{
             let el = Ellipse::new([0.0; 4]).border(ellipse::Border{ color: [1.0; 4], radius: 1.0}).resolution(20);
@@ -600,7 +600,7 @@ impl<'t> App<'t> {
     }
 
     fn update(&mut self, _args: &UpdateArgs) {
-        
+
     }
 
     fn cursor(&mut self, cursor: Cursor) {
@@ -643,7 +643,6 @@ fn session(sender: std::sync::mpsc::Sender<Vec<Picture>>) -> Result<Session,comm
         });
         println!("intercom task termination");
     });
-    
+
     Ok(session)
 }
-

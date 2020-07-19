@@ -34,7 +34,7 @@ use common::{
         Session,
     },
     send::Intercom,
-    code::{Op,Ops,Picture,Coord,EncodedNumber,Const,Number,PositiveNumber,NegativeNumber},
+    code::*,
 };
 
 
@@ -103,6 +103,7 @@ impl Data {
                     v.push([x as f64, y as f64]);
                 }
                 if v.len() > 0 {
+                    println!("data: {}",v.len());
                     dts.push(Data{ data: v });
                 }
             }
@@ -112,17 +113,71 @@ impl Data {
 
 }
 
-fn asm(session: &mut Session, asm: &str)  {
+fn asm(session: &mut Session, asm: &str) -> Option<Ops> {
     //println!("ASM: {}",asm);
     match session.eval_asm(asm) {
-        Ok(_ops) => {
-            //println!("{:?}",ops);
+        Ok(ops) => {
+            Some(ops)
         },
+        Err(e) => {
+            println!("Error: {:?}",e);
+            None
+        },
+    }
+}
+
+fn render(session: &mut Session, ops: &Ops) {
+    //ap render ap car ap cdr
+    let mut nops = vec![
+        Op::App, Op::Const(Const::Fun(Fun::Render)),
+        Op::App, Op::Const(Const::Fun(Fun::Car)),
+        Op::App, Op::Const(Const::Fun(Fun::Cdr)),
+    ]; 
+    nops.extend(ops.0.iter().map(|o|o.clone()));
+    match session.eval_ops(Ops(nops)) {
+        Ok(_) => {},
         Err(e) => {
             println!("Error: {:?}",e);
         },
     }
 }
+
+fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
+    //ap ap ap interact galaxy nil ap ap vec 0 0
+    let mut nops = vec![
+        Op::App, Op::App, Op::App,
+        Op::Const(Const::Fun(Fun::Interact)),
+        Op::Const(Const::Fun(Fun::Galaxy)),
+        //Op::Const(Const::Fun(Fun::Nil)),
+        Op::App, Op::Const(Const::Fun(Fun::Car)),
+    ]; 
+    nops.extend(ops.0.into_iter());
+    nops.extend(vec![
+        Op::App, Op::App, Op::Const(Const::Fun(Fun::Vec)),
+        Op::Const(Const::EncodedNumber(EncodedNumber {
+            number: match x < 0 {
+                true => Number::Negative(NegativeNumber{ value: x as isize }),
+                false => Number::Positive(PositiveNumber{ value: x as usize }),
+            },
+            modulation: Modulation::Demodulated,
+        })),
+        Op::Const(Const::EncodedNumber(EncodedNumber {
+            number: match y < 0 {
+                true => Number::Negative(NegativeNumber{ value: y as isize }),
+                false => Number::Positive(PositiveNumber{ value: y as usize }),
+            },
+            modulation: Modulation::Demodulated,
+        })),
+    ].into_iter());
+    match session.eval_ops(Ops(nops)) {
+        Ok(ops) => { Some(ops) },
+        Err(e) => {
+            println!("Error: {:?}",e);
+            None
+        },
+    }
+}
+
 
 
 fn main() {
@@ -135,8 +190,12 @@ fn main() {
         },
     };
 
-    let init_asm = "ap render ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";    
-    asm(&mut session, init_asm);
+    let init_asm = "ap ap ap interact galaxy nil ap ap vec 0 0";
+    //ap render ap car ap cdr 
+    let mut current = asm(&mut session,init_asm);
+    if let Some(ops) = &current {
+        render(&mut session,ops);
+    }
     
     let opengl = OpenGL::V3_2;
 
@@ -219,10 +278,21 @@ fn main() {
                     {
                         let coo = app.main.scene.get_cursor().cursor;
                         //let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
-                        //let asm = "ap car ap cdr ap car ap cdr ap ap ap interact galaxy nil ap ap vec 0 0";
-                        //if let Some(data) = asm_to_opt_data(&mut session, &asm) {
-                        //    app.main.scene.map.next_data(&data);
-                        //}
+                        //let nasm = "ap render ap car ap cdr ap ap ap interact galaxy ap ap cons 0 ap ap cons ap ap cons 0 nil ap ap cons 0 ap ap cons nil nil ap ap vec 0 0";
+                        //asm(&mut session, nasm);
+
+                        
+                        if let Some(ops) = current.take() {
+                            let t = std::time::Instant::now();
+                            current = next(&mut session, ops, coo[0] as i64, coo[1] as i64);
+                            println!("Next step:   {:?}",t.elapsed());
+                            if let Some(ops) = &current {
+                                let t = std::time::Instant::now();
+                                render(&mut session,ops);
+                                println!("     render: {:?}",t.elapsed());
+                            }
+                        }
+
                         //println!("Click: {:?}",app.main.scene.get_cursor());
                     }
                     cursor.state = CursorState::None;

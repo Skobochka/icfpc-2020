@@ -66,6 +66,9 @@ async fn main() -> Result<(), Error> {
                         },
                     }
                 },
+                OuterRequest::RenderPictures { pictures, } => {
+                    println!("** >> render rq: {:?}", pictures);
+                },
             }
         }
 

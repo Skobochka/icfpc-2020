@@ -44,6 +44,9 @@ pub enum OuterRequest {
         modulated_req: String,
         modulated_rep: mpsc::Sender<String>,
     },
+    RenderPictures {
+        pictures: Vec<Picture>,
+    },
 }
 
 

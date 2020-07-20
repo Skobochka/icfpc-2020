@@ -412,7 +412,22 @@ fn main() {
                     };
                     app.cursor(cursor);
                     {
-
+                        let coo = app.main.scene.get_cursor().cursor;
+                        if let Some(ops) = current.take() {
+                            let t = std::time::Instant::now();
+                            if let Some(state_list_ops) = extract_state(&mut session, ops) {
+                                current = next(&mut session, state_list_ops, coo[0] as i64, coo[1] as i64, &mut valid_state);
+                            }
+                            //current = next(&mut session, ops,0,0);
+                            println!("Next step ({:?}):   {:?}",coo,t.elapsed());
+                            if let Some(ops) = &current {
+                                app.main.scene.map.clear();
+                                let t = std::time::Instant::now();
+                                current_frame_seq = render_first(&mut session,ops);
+                                println!("     render_first: {:?}",t.elapsed());
+                            }
+                            println!("waiting for next click...");
+                        }
                     }
                     cursor.state = CursorState::None;
                 },

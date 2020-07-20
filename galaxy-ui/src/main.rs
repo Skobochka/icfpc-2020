@@ -123,15 +123,33 @@ fn render(session: &mut Session, ops: &Ops) {
 
 fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
     //ap ap ap interact galaxy nil ap ap vec 0 0
-    let mut nops = vec![
-        Op::App, Op::App, Op::App,
+
+    let mut state_ops = Ops(vec![
+        Op::App,
+        Op::Const(Const::Fun(Fun::Car)),
+    ]);
+    state_ops.0.extend(ops.0);
+    let state_list_ops = match session.eval_force_list(state_ops) {
+        Ok(ops) =>
+            ops,
+        Err(e) => {
+            println!("Error: {:?}",e);
+            return None;
+        },
+    };
+
+    let mut nops = Ops(vec![
+        Op::App,
+        Op::App,
+        Op::App,
         Op::Const(Const::Fun(Fun::Interact)),
         Op::Const(Const::Fun(Fun::Galaxy)),
-        Op::App, Op::Const(Const::Fun(Fun::Car)),
-    ];
-    nops.extend(ops.0.into_iter());
-    nops.extend(vec![
-        Op::App, Op::App, Op::Const(Const::Fun(Fun::Vec)),
+    ]);
+    nops.0.extend(state_list_ops.0);
+    nops.0.extend(vec![
+        Op::App,
+        Op::App,
+        Op::Const(Const::Fun(Fun::Vec)),
         Op::Const(Const::EncodedNumber(EncodedNumber {
             number: match x < 0 {
                 true => Number::Negative(NegativeNumber{ value: x as isize }),
@@ -146,11 +164,11 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
             },
             modulation: Modulation::Demodulated,
         })),
-    ].into_iter());
+    ]);
 
     println!("evaluating: {:?}", nops);
 
-    match session.eval_ops(Ops(nops)) {
+    match session.eval_ops(nops) {
         Ok(ops) => { Some(ops) },
         Err(e) => {
             println!("Error: {:?}",e);

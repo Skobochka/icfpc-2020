@@ -190,7 +190,7 @@ pub struct Cache {
 impl Cache {
     pub fn new() -> Cache {
         Cache {
-            memo: LruCache::new(64 * 1024),
+            memo: LruCache::new(128 * 1024),
         }
     }
 
@@ -231,6 +231,8 @@ impl Interpreter {
     }
 
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
+        println!("Interpreter::build_tree() on {} ops", ops.len());
+
         enum State {
             AwaitAppFun,
             AwaitAppArg { fun: Rc<AstNodeH>, },
@@ -356,16 +358,6 @@ impl Interpreter {
         );
 
         Ok(())
-    }
-
-    pub fn lookup_env(&self, env: &Env, key: Ops) -> Result<Option<Ops>, Error> {
-        if let Ast::Tree(ast_node) = self.build_tree(key)? {
-            if let Some(ast_node) = env.lookup_ast(&ast_node) {
-                let ast_node = Rc::new(ast_node.clone());
-                return Ok(Some(ast_node.render()))
-            }
-        }
-        Ok(None)
     }
 
     pub fn eval(&self, ast: Ast, env: &Env) -> Result<Ops, Error> {
@@ -1832,9 +1824,9 @@ impl Interpreter {
         }
     }
 
-    fn eval_modem(&self, ast_node: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let ast_node = self.eval_mod(ast_node, env, cache)?;
-        let ast_node = self.eval_dem(ast_node, env, cache)?;
+    fn eval_modem(&self, ast_node: Rc<AstNodeH>, _env: &Env, _cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        // let ast_node = self.eval_mod(ast_node, env, cache)?;
+        // let ast_node = self.eval_dem(ast_node, env, cache)?;
         Ok(ast_node)
     }
 

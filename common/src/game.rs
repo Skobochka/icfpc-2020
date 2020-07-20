@@ -1,10 +1,19 @@
 use super::encoder::{
     ConsList,
+    ListVal,
     Modulable,
     PrettyPrintable,
     Error as EncoderError,
 };
 
+use super::code::{
+    make_mod_number,
+};
+
+use super::send::{
+    Intercom,
+};
+use tokio::runtime::Runtime;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Vec2 {
@@ -70,9 +79,10 @@ pub struct GameResponse {
     pub state: GameState,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct GameRound {
-    pub player_key: usize,
+    intercom: Intercom,
+    runtime: Runtime,
+    pub player_key: isize,
     pub last_response: Option<GameResponse>
 
 }
@@ -84,11 +94,95 @@ pub enum Error {
 }
 
 impl GameRound {
-    pub fn new(player_key: &str) -> GameRound {
+    pub fn new(api_url: &str, player_key: &str) -> GameRound {
         GameRound {
-            player_key: usize::from_str_radix(player_key, 10).unwrap(),
+            player_key: isize::from_str_radix(player_key, 10).unwrap(),
             last_response: None,
+            intercom: Intercom::new(api_url.to_string()),
+            runtime: Runtime::new().unwrap(),
         }
+    }
+
+    pub fn run_request(&mut self, request: String) -> String {
+        println!("-> {}", &request);
+        println!("[DEBUG] => : {}", GameRound::format_modulated(&request));
+        let response = self.intercom.send(request, &mut self.runtime).unwrap();
+        println!("<- {}", &response);
+        println!("[DEBUG] <= : {}", GameRound::format_modulated(&response));
+        response
+    }
+    
+    pub fn format_modulated(modulated: &str) -> String {
+        ConsList::demodulate_from_string(&modulated).unwrap().to_pretty_string()
+    }
+
+    pub fn make_join_request(&self) -> String {
+        // JOIN request
+        // (2, playerKey, (...unknown list...))
+
+        // assuming unknown list as nil for now
+        let unknown_param = ListVal::Cons(Box::new(ConsList::Nil));
+        
+        let request = ConsList::Cons(
+            ListVal::Number(make_mod_number(2)),
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(make_mod_number(self.player_key)),
+                ListVal::Cons(Box::new(ConsList::Cons(
+                    unknown_param,
+                    ListVal::Cons(Box::new(ConsList::Nil)))))))));
+
+        request.modulate_to_string()
+    }
+
+    pub fn make_start_request(&self, x0: isize, x1: isize, x2: isize, x3: isize) -> String {
+        // START
+        // (3, playerKey, (x0, x1, x2, x3))
+        // The third item of this list is always a list of 4 numbers – it’s the initial ship parameters.
+        // We noticed, that START doesn’t finish successfully when x3 is 0 or xi’s are too large.
+                
+        let request = ConsList::Cons(
+            ListVal::Number(make_mod_number(3)),
+            
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(make_mod_number(self.player_key)),
+                
+                ListVal::Cons(Box::new(ConsList::Cons(
+                    
+                    ListVal::Cons(Box::new(ConsList::Cons(
+                        ListVal::Number(make_mod_number(x0)),
+                        ListVal::Cons(Box::new(ConsList::Cons(
+                            ListVal::Number(make_mod_number(x1)),
+                            ListVal::Cons(Box::new(ConsList::Cons(
+                                ListVal::Number(make_mod_number(x2)),
+                                ListVal::Cons(Box::new(ConsList::Cons(
+                                    ListVal::Number(make_mod_number(x3)),
+                                    ListVal::Cons(Box::new(ConsList::Nil)))))))))))))),
+
+                    ListVal::Cons(Box::new(ConsList::Nil)))))))));
+
+        request.modulate_to_string()
+    }
+
+    pub fn make_commands_request(&self, _cmds: Vec<(&Ship, Command)>) -> String {
+        // COMMANDS
+        // (4, playerKey, commands)
+        // commands is the list of issued commands.
+        // Each item has format (type, shipId, ...), where ... denotes command-specific parameters.
+
+        // assuming unknown list as nil for now
+        let request = ConsList::Cons(
+            ListVal::Number(make_mod_number(4)),
+
+            ListVal::Cons(Box::new(ConsList::Cons(
+                ListVal::Number(make_mod_number(self.player_key)),
+
+                ListVal::Cons(Box::new(ConsList::Cons(
+
+                    ListVal::Cons(Box::new(ConsList::Nil)), // here comes command list
+                    
+                    ListVal::Cons(Box::new(ConsList::Nil)))))))));
+
+        request.modulate_to_string()
     }
 
     pub fn parse_ship(resp: &ConsList) -> Result<Ship, Error> {
@@ -239,5 +333,14 @@ mod tests {
         assert_eq!(GameRound::parse_game_response_from_string(resp1).is_ok(), true);
         let resp2 = "1101100001110110000111110111100001000000001101100001111101111000011100000011011000011101110010000000011110111000010000110111010000000001100001111011000111111011100001000011011101000000000111111110110000111010111110110001010101010111011110110001101011110101101011010110110000100110101101110010000001101100001001100001111110101101100001111101110001001000111000010100111110100110011000111111011100011110111011100100000011011010101101100001001101011011100100000011011000010011111101011110110000110100001000000000000";
         assert_eq!(GameRound::parse_game_response_from_string(resp2).is_ok(), true);
+    }
+
+    #[test]
+    fn round_requests_composer() {
+        let round = GameRound::new("", "1");
+        
+        assert_eq!(round.make_join_request(), "11011000101101100001110000");
+        assert_eq!(round.make_start_request(0, 0, 0, 0), "1101100011110110000111110101101011010110100000");
+        assert_eq!(round.make_commands_request(vec![]), "11011001001101100001110000");
     }
 }

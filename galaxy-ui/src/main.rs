@@ -506,6 +506,7 @@ fn main() {
                     println!("loading current galaxy state");
                     match GalaxyState::load() {
                         Ok(galaxy_state) => {
+                            let t = std::time::Instant::now();
                             current = next(
                                 &mut session,
                                 galaxy_state.state,
@@ -513,6 +514,12 @@ fn main() {
                                 galaxy_state.last_click.1,
                                 &mut valid_state,
                             );
+                            println!("Load step:   {:?}",t.elapsed());
+                            if let Some(ops) = &current {
+                                let t = std::time::Instant::now();
+                                render(&mut session,ops);
+                                println!("     render: {:?}",t.elapsed());
+                            }
                         },
                         Err(error) =>
                             println!(" !! failed to load state: {:?}", error),

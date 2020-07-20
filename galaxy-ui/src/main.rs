@@ -58,8 +58,8 @@ pub struct Data {
     pub(crate) data: Vec<[f64; 2]>,
 }
 impl Data {
-    pub fn width(&self) -> f64 { 80.0 }
-    pub fn height(&self) -> f64 { 60.0 }
+    pub fn width(&self) -> f64 { 400.0 }
+    pub fn height(&self) -> f64 { 300.0 }
 }
 
 impl Data {
@@ -450,7 +450,7 @@ impl Scene {
         let screen_w = c.screen_size.0;
         let screen_h = c.screen_size.1;
         let rm = f64::min(w,h);
-        let sc = 30.0; //8.0;
+        let sc = 300.0; //8.0;
         let transform = math::translate([(2.0*l+w)/screen_w-1.0,1.0-(2.0*t+h)/screen_h]).scale(rm/screen_w/sc,rm/screen_h/sc);
         let back = math::multiply(DrawContext::reverse(transform),c.transform);
         let mut scene = Scene {

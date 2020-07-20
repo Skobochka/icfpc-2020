@@ -270,8 +270,8 @@ impl Map {
         let mut dx = data.width();
         let mut dy = data.height();
 
-        if dx < 80.0 { dx = 80.0; }
-        if dy < 60.0 { dy = 60.0; }
+        if dx < 400.0 { dx = 400.0; }
+        if dy < 300.0 { dy = 300.0; }
 
         let size_x = ( -dx/2.0, dx/2.0);
         let size_y = ( -dy/2.0, dy/2.0);

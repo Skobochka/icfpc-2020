@@ -869,7 +869,7 @@ impl Interpreter {
                                 }))),
                         },
 
-                    // unresolved fun on something
+                    // modulated bits on something
                     (State::EvalAppFun { arg, }, EvalOp::Mod { .. }) =>
                         return Err(Error::ApplyingModulatedBitsOn { arg: arg.render(), }),
 

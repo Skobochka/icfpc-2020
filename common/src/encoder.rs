@@ -15,6 +15,25 @@ pub enum Error {
     ParseIntError(ParseIntError),
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::BadPrefix => write!(f, "Error::BadPrefix"),
+            Error::BadWidthCode => write!(f, "Error::BadWidthCode"),
+            Error::ParseIntError(_) => write!(f, "Error::ParseIntError"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::ParseIntError(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 pub trait Modulable<T=Self> {
     fn demodulate_from_string(from: &str) -> Result<T, Error>;
     fn modulate_to_string(&self) -> String;

@@ -128,14 +128,19 @@ fn render_first(session: &mut Session, ops: &Ops) -> Option<Ops> {
     nops.extend(ops.0.iter().map(|o|o.clone()));
     match session.eval_ops(Ops(nops)) {
         Ok(ops) => {
-            match ops.0.len() {
+            if let Some(mut ops) =  match ops.0.len() {
                 0 => None,
                 1 => match &ops.0[0] {
                     Op::Const(Const::Fun(Fun::Nil)) => None,
                     _ => Some(ops),
                 },
                 _ => Some(ops),
+            } {
+                while let Some(n_ops) = render_next(session,&ops) {
+                    ops = n_ops;
+                }
             }
+            None
         },
         Err(e) => {
             println!("Error in render_first: {:?}",e);
@@ -357,8 +362,12 @@ fn main() {
                 app.cursor(cursor);
                 cursor.scroll = [0.0; 2];
 
-                if let Ok(pics) = picture_rx.try_recv() {
-                    pictures_incoming = Some(pics);
+                let mut pictures_incoming: Option<Vec<Picture>> = None;
+                while let Ok(pics) = picture_rx.try_recv() {
+                    match &mut pictures_incoming {
+                        Some(ps) => ps.extend(pics.into_iter()),
+                        None => pictures_incoming = Some(pics),
+                    }
                 }
                 if let Some(pics) = pictures_incoming.take() {
                     prev_pixels.clear();

@@ -3,6 +3,7 @@ use super::{
     Ast,
     Cache,
     AstNode,
+    AstNodeH,
     Error,
     Interpreter,
     EvalOp,
@@ -76,15 +77,15 @@ fn ast_tree_basic() {
                     modulation: Modulation::Demodulated,
                 })),
             ]),
-        ),
-        Ok(Ast::Tree(AstNode::Literal {
-            value: Op::Const(Const::EncodedNumber(EncodedNumber {
+        ).unwrap().render(),
+        Ops(vec![
+            Op::Const(Const::EncodedNumber(EncodedNumber {
                 number: Number::Positive(PositiveNumber {
                     value: 1,
                 }),
                 modulation: Modulation::Demodulated,
             })),
-        })),
+        ]),
     );
 
     assert_eq!(
@@ -105,7 +106,9 @@ fn ast_tree_basic() {
         interpreter.build_tree(
             Ops(vec![Op::App, Op::Const(Const::Fun(Fun::Inc))]),
         ),
-        Err(Error::NoAppArgProvided { fun: std::rc::Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), }).render(), }),
+        Err(Error::NoAppArgProvided {
+            fun: std::rc::Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), })).render(),
+        }),
     );
 }
 
@@ -174,13 +177,13 @@ fn eval_basic() {
                 }),
                 modulation: Modulation::Demodulated,
             },
-            arg: std::rc::Rc::new(AstNode::Literal {
+            arg: std::rc::Rc::new(AstNodeH::new(AstNode::Literal {
                 value: Op::Variable(Variable {
                     name: Number::Positive(PositiveNumber {
                         value: 1,
                     }),
                 }),
-            }).render(),
+            })).render(),
         }),
     );
 }

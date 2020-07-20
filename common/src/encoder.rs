@@ -81,21 +81,13 @@ impl Modulable for EncodedNumber {
             val
         }
 
-        match self.modulation {
-            Modulation::Demodulated =>
-                match &self.number {
-                    Number::Positive(e) => e.value.to_string(),
-                    Number::Negative(e) => e.value.to_string(),
-                }
-            Modulation::Modulated =>
-                match &self.number {
-                    Number::Positive(e) if e.value == 0 =>
-                        String::from("010"),
-                    Number::Negative(e) if e.value == 0 =>
-                        String::from("010"),
-                    Number::Positive(e) => modulate_number(format!("{:b}",e.value).as_str(), "01"),
-                    Number::Negative(e) => modulate_number(format!("{:b}",e.value.abs()).as_str(), "10")
-                }
+        match &self.number {
+            Number::Positive(e) if e.value == 0 =>
+                String::from("010"),
+            Number::Negative(e) if e.value == 0 =>
+                String::from("010"),
+            Number::Positive(e) => modulate_number(format!("{:b}",e.value).as_str(), "01"),
+            Number::Negative(e) => modulate_number(format!("{:b}",e.value.abs()).as_str(), "10")
         }
     }
 }

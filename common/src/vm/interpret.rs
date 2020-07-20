@@ -89,7 +89,9 @@ pub enum Error {
     ApplyingModulatedBitsOn { arg: Ops, },
     ApplyingFunOnModulatedBits { fun: Ops, },
     ApplyingCarToLiteral { value: Op, },
+    ApplyingCarToInvalidFun { fun: Ops, },
     ApplyingCdrToLiteral { value: Op, },
+    ApplyingCdrToInvalidFun { fun: Ops, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -387,6 +389,8 @@ impl Interpreter {
             EvalAppFun { arg: Rc<AstNodeH>, },
             EvalAppArgNum { fun: EvalFunNum, },
             EvalAppArgIsNil,
+            EvalAppArgCar,
+            EvalAppArgCdr,
         }
 
         struct StackFrame {
@@ -583,53 +587,15 @@ impl Interpreter {
 
                     // Car0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Car0))) => {
-                        ast_node = Rc::new(AstNodeH::new(match &arg.kind {
-                            AstNode::Literal { value: Op::Const(Const::ModulatedBits(bits)), } =>
-                                match encoder::ConsList::demodulate_from_string(bits) {
-                                    Ok(encoder::ConsList::Nil) =>
-                                        return Err(Error::ApplyingCarToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
-                                    Ok(encoder::ConsList::Cons(encoder::ListVal::Number(number), _)) =>
-                                        AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
-                                    Ok(encoder::ConsList::Cons(encoder::ListVal::Cons(car), _)) =>
-                                        AstNode::Literal { value: Op::Const(Const::ModulatedBits(car.modulate_to_string())), },
-                                    Err(error) =>
-                                        return Err(Error::ConsListDem(error)),
-                                },
-                            AstNode::App { .. } =>
-                                AstNode::App {
-                                    fun: arg,
-                                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
-                                },
-                            AstNode::Literal { value, } =>
-                                return Err(Error::ApplyingCarToLiteral { value: value.clone(), }),
-                        }));
-                        cache.memo(root, ast_node.clone());
+                        states.push(StackFrame { root, state: State::EvalAppArgCar, });
+                        ast_node = arg;
                         break;
                     },
 
                     // Cdr0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0))) => {
-                        ast_node = Rc::new(AstNodeH::new(match &arg.kind {
-                            AstNode::Literal { value: Op::Const(Const::ModulatedBits(bits)), } =>
-                                match encoder::ConsList::demodulate_from_string(bits) {
-                                    Ok(encoder::ConsList::Nil) =>
-                                        return Err(Error::ApplyingCdrToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
-                                    Ok(encoder::ConsList::Cons(_, encoder::ListVal::Number(number))) =>
-                                        AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
-                                    Ok(encoder::ConsList::Cons(_, encoder::ListVal::Cons(cdr))) =>
-                                        AstNode::Literal { value: Op::Const(Const::ModulatedBits(cdr.modulate_to_string())), },
-                                    Err(error) =>
-                                        return Err(Error::ConsListDem(error)),
-                                },
-                            AstNode::App { .. } =>
-                                AstNode::App {
-                                    fun: arg,
-                                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), })),
-                                },
-                            AstNode::Literal { value, } =>
-                                return Err(Error::ApplyingCdrToLiteral { value: value.clone(), }),
-                        }));
-                        cache.memo(root, ast_node.clone());
+                        states.push(StackFrame { root, state: State::EvalAppArgCdr, });
+                        ast_node = arg;
                         break;
                     },
 
@@ -691,6 +657,98 @@ impl Interpreter {
                                         Fun::False,
                                 }
                             )),
+                        }));
+                        cache.memo(root, ast_node.clone());
+                        break;
+                    },
+
+                    // Car0 on a number
+                    (State::EvalAppArgCar, EvalOp::Num { number, }) =>
+                        return Err(Error::ApplyingCarToLiteral { value: Op::Const(Const::EncodedNumber(number)), }),
+
+                    // Car0 on a Cons2
+                    (State::EvalAppArgCar, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { x, .. }))) => {
+                        ast_node = x;
+                        cache.memo(root, ast_node.clone());
+                        break;
+                    },
+
+                    // Car0 on another fun
+                    (State::EvalAppArgCar, EvalOp::Fun(fun)) =>
+                        return Err(Error::ApplyingCarToInvalidFun { fun: EvalOp::Fun(fun).render(), }),
+
+                    // Car0 on an abstract
+                    (State::EvalAppArgCar, EvalOp::Abs(arg_ast_node)) =>
+                        match env.lookup_ast(&arg_ast_node) {
+                            Some(subst_ast_node) => {
+                                states.push(StackFrame { root, state: State::EvalAppArgCar, });
+                                ast_node = Rc::new(subst_ast_node.clone());
+                                break;
+                            },
+                            None =>
+                                eval_op = EvalOp::Abs(Rc::new(AstNodeH::new(AstNode::App {
+                                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), })),
+                                    arg: arg_ast_node,
+                                }))),
+                        },
+
+                    // Car0 on an modulated bits
+                    (State::EvalAppArgCar, EvalOp::Mod { bits, }) => {
+                        ast_node = Rc::new(AstNodeH::new(match encoder::ConsList::demodulate_from_string(&bits) {
+                            Ok(encoder::ConsList::Nil) =>
+                                return Err(Error::ApplyingCarToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                            Ok(encoder::ConsList::Cons(encoder::ListVal::Number(number), _)) =>
+                                AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
+                            Ok(encoder::ConsList::Cons(encoder::ListVal::Cons(car), _)) =>
+                                AstNode::Literal { value: Op::Const(Const::ModulatedBits(car.modulate_to_string())), },
+                            Err(error) =>
+                                return Err(Error::ConsListDem(error)),
+                        }));
+                        cache.memo(root, ast_node.clone());
+                        break;
+                    },
+
+                    // Cdr0 on a number
+                    (State::EvalAppArgCdr, EvalOp::Num { number, }) =>
+                        return Err(Error::ApplyingCdrToLiteral { value: Op::Const(Const::EncodedNumber(number)), }),
+
+                    // Cdr0 on a Cons2
+                    (State::EvalAppArgCdr, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { y, .. }))) => {
+                        ast_node = y;
+                        cache.memo(root, ast_node.clone());
+                        break;
+                    },
+
+                    // Cdr0 on another fun
+                    (State::EvalAppArgCdr, EvalOp::Fun(fun)) =>
+                        return Err(Error::ApplyingCdrToInvalidFun { fun: EvalOp::Fun(fun).render(), }),
+
+                    // Cdr0 on an abstract
+                    (State::EvalAppArgCdr, EvalOp::Abs(arg_ast_node)) =>
+                        match env.lookup_ast(&arg_ast_node) {
+                            Some(subst_ast_node) => {
+                                states.push(StackFrame { root, state: State::EvalAppArgCdr, });
+                                ast_node = Rc::new(subst_ast_node.clone());
+                                break;
+                            },
+                            None =>
+                                eval_op = EvalOp::Abs(Rc::new(AstNodeH::new(AstNode::App {
+                                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), })),
+                                    arg: arg_ast_node,
+                                }))),
+                        },
+
+                    // Cdr0 on an modulated bits
+                    (State::EvalAppArgCdr, EvalOp::Mod { bits, }) => {
+                        ast_node = Rc::new(AstNodeH::new(match encoder::ConsList::demodulate_from_string(&bits) {
+                            Ok(encoder::ConsList::Nil) =>
+                                return Err(Error::ApplyingCdrToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                            Ok(encoder::ConsList::Cons(_, encoder::ListVal::Number(number))) =>
+                                AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
+                            Ok(encoder::ConsList::Cons(_, encoder::ListVal::Cons(cdr))) =>
+                                AstNode::Literal { value: Op::Const(Const::ModulatedBits(cdr.modulate_to_string())), },
+                            Err(error) =>
+                                return Err(Error::ConsListDem(error)),
                         }));
                         cache.memo(root, ast_node.clone());
                         break;

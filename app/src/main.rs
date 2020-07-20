@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for (ship, _) in full_state.state.unwrap().ships_n_commands {
             if ship.role != our_side {
                 // Ignore enemy ships for now
+                continue;
             }
 
             let factor = 3; // acceleration factor

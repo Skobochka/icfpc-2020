@@ -230,8 +230,10 @@ impl GameRound {
                     ListVal::Cons(Box::new(ConsList::Cons(
                         ListVal::Number(make_mod_number(ship.ship_id)),
                         ListVal::Cons(Box::new(ConsList::Cons(
-                            ListVal::Number(make_mod_number(x)),
-                            ListVal::Number(make_mod_number(y))))))))),
+                            ListVal::Cons(Box::new(ConsList::Cons(
+                                ListVal::Number(make_mod_number(x)),
+                                ListVal::Number(make_mod_number(y))))),
+                            ListVal::Cons(Box::new(ConsList::Nil))))))))),
             _ => unimplemented!(),
         }
     }
@@ -404,6 +406,37 @@ mod tests {
         assert_eq!(round.serialize_request(GameRequest::JOIN), "11011000101101100001110000");
         assert_eq!(round.serialize_request(GameRequest::START { x0: 0, x1: 0, x2: 0, x3: 0}), "1101100011110110000111110101101011010110100000");
         assert_eq!(round.serialize_request(GameRequest::COMMANDS(vec![])), "11011001001101100001110000");
+    }
+
+    #[test]
+    fn test_commands() {
+        let round = GameRound::new("", "1");
+
+        let state_str = "11011000011101100001111101111000011000000011011000011111011110000111000000110110000111011100100000000111101110000100001101110100000000011000011110110000111110111000010000110111010000000001111111101100001110101111101100010111101110000101011111011000010101111010110101101011011000010011010110111001000000110110000100110000111111010110110000111110111000101101101100001011011111010001110100001111101110001011001101110010111001101101000110110000100110110100011011101000000011011000100011111101011110110001001100001000000000000";
+        let full_state = GameRound::parse_game_response_from_string(state_str).unwrap();
+        let our_side = full_state.static_info.unwrap().role;
+
+        let mut cmds : Vec::<(Ship, Command)> = vec![];
+
+        for (ship, _) in full_state.state.unwrap().ships_n_commands {
+            if ship.role != our_side {
+                // Ignore enemy ships for now
+                continue;
+            }
+
+            let factor = 3; // acceleration factor
+            let cmd = Command::Accelerate{ vec: Vec2 {
+                x: ship.position.x * factor,
+                y: ship.position.x * factor, }
+            };
+
+            cmds.push((ship, cmd));
+        }
+
+        let ser_request = round.serialize_request(GameRequest::COMMANDS(cmds));
+        println!("{}", GameRound::format_modulated(&ser_request));
+        assert_eq!(ser_request, "1101100100110110000111111101011010111110110100011011011010001101000000");
+
     }
 
     #[test]

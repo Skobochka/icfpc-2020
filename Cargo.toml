@@ -3,4 +3,5 @@ members = [
     "app",
     "common",
     "galaxy-run",
+    "galaxy-ui",
 ]

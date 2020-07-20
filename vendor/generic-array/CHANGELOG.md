@@ -1,3 +1,20 @@
+* **`0.13.2`**
+    * Add feature `more_lengths`, which adds more `From`/`Into` implementations for arrays of various lengths.
+
+* **`0.13.1`**
+    * Mark `GenericArray` as `#[repr(transparent)]`
+    * Implement `Into<[T; N]>` for `GenericArray<T, N>` up to N=32
+
+* **`0.13.0`**
+    * Allow `arr!` to be imported with use syntax.
+        * Requires minumum Rust version of 1.30.1
+
+* **`0.12.2`**
+    * Implement `FusedIterator` for `GenericArrayIter`
+
+* **`0.12.1`**
+    * Use internal iteration where possible and provide more efficient internal iteration methods.
+
 * **`0.12.0`**
     * Allow trailing commas in `arr!` macro.
     * **BREAKING**: Serialize `GenericArray` using `serde` tuples, instead of variable-length sequences. This may not be compatible with old serialized data.

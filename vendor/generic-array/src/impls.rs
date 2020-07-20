@@ -1,10 +1,12 @@
-use super::{ArrayLength, GenericArray};
 use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 use core::fmt::{self, Debug};
 use core::hash::{Hash, Hasher};
-use functional::*;
-use sequence::*;
+
+use super::{ArrayLength, GenericArray};
+
+use crate::functional::*;
+use crate::sequence::*;
 
 impl<T: Default, N> Default for GenericArray<T, N>
 where
@@ -40,11 +42,7 @@ where
         **self == **other
     }
 }
-impl<T: Eq, N> Eq for GenericArray<T, N>
-where
-    N: ArrayLength<T>,
-{
-}
+impl<T: Eq, N> Eq for GenericArray<T, N> where N: ArrayLength<T> {}
 
 impl<T: PartialOrd, N> PartialOrd for GenericArray<T, N>
 where
@@ -142,7 +140,6 @@ macro_rules! impl_from {
                 }
             }
         )*
-
     }
 }
 
@@ -179,4 +176,57 @@ impl_from! {
     30 => ::typenum::U30,
     31 => ::typenum::U31,
     32 => ::typenum::U32
+}
+
+#[cfg(feature = "more_lengths")]
+impl_from! {
+    33 => ::typenum::U33,
+    34 => ::typenum::U34,
+    35 => ::typenum::U35,
+    36 => ::typenum::U36,
+    37 => ::typenum::U37,
+    38 => ::typenum::U38,
+    39 => ::typenum::U39,
+    40 => ::typenum::U40,
+    41 => ::typenum::U41,
+    42 => ::typenum::U42,
+    43 => ::typenum::U43,
+    44 => ::typenum::U44,
+    45 => ::typenum::U45,
+    46 => ::typenum::U46,
+    47 => ::typenum::U47,
+    48 => ::typenum::U48,
+    49 => ::typenum::U49,
+    50 => ::typenum::U50,
+    51 => ::typenum::U51,
+    52 => ::typenum::U52,
+    53 => ::typenum::U53,
+    54 => ::typenum::U54,
+    55 => ::typenum::U55,
+    56 => ::typenum::U56,
+    57 => ::typenum::U57,
+    58 => ::typenum::U58,
+    59 => ::typenum::U59,
+    60 => ::typenum::U60,
+    61 => ::typenum::U61,
+    62 => ::typenum::U62,
+    63 => ::typenum::U63,
+    64 => ::typenum::U64,
+
+    70 => ::typenum::U70,
+    80 => ::typenum::U80,
+    90 => ::typenum::U90,
+
+    100 => ::typenum::U100,
+    200 => ::typenum::U200,
+    300 => ::typenum::U300,
+    400 => ::typenum::U400,
+    500 => ::typenum::U500,
+
+    128 => ::typenum::U128,
+    256 => ::typenum::U256,
+    512 => ::typenum::U512,
+
+    1000 => ::typenum::U1000,
+    1024 => ::typenum::U1024
 }

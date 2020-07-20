@@ -1618,7 +1618,6 @@ impl Interpreter {
     fn eval_render(&self, render_args: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
         let mut render_ops = render_args.render();
 
-        let mut pictures = Vec::new();
         loop {
             let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &render_ops, env, cache)?;
             if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
@@ -1630,7 +1629,17 @@ impl Interpreter {
                 (_, None) =>
                     unreachable!(),
                 (1, Some(Op::Const(Const::Picture(picture)))) => {
-                    pictures.push(picture);
+                    // perform send
+                    if let Some(outer_channel) = &self.outer_channel {
+                        let outer_send_result = outer_channel.unbounded_send(OuterRequest::RenderPictures {
+                            pictures: vec![picture],
+                        });
+                        if let Err(..) = outer_send_result {
+                            return Err(Error::OuterChannelIsClosed);
+                        }
+                    } else {
+                        return Err(Error::RenderOpIsNotSupportedWithoutOuterChannel);
+                    };
                 },
                 (_, Some(last_item)) => {
                     ops.0.push(last_item);
@@ -1639,19 +1648,15 @@ impl Interpreter {
             }
 
             render_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &render_ops, env, cache)?;
+            break;
         }
 
-        // perform send
-        if let Some(outer_channel) = &self.outer_channel {
-            let outer_send_result = outer_channel.unbounded_send(OuterRequest::RenderPictures { pictures, });
-            if let Err(..) = outer_send_result {
-                return Err(Error::OuterChannelIsClosed);
-            }
-        } else {
-            return Err(Error::RenderOpIsNotSupportedWithoutOuterChannel);
-        };
-
-        Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })))
+        match self.build_tree(render_ops)? {
+            Ast::Empty =>
+                unreachable!(), // should return at least nil
+            Ast::Tree(ast_node) =>
+                Ok(Rc::new(ast_node)),
+        }
     }
 
     fn eval_mod(&self, args: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {

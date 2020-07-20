@@ -221,19 +221,45 @@ impl Modulable for ConsList {
     }
 
     fn modulate_to_string(&self) -> String {
-        fn modulate_val(val: &ListVal) -> String {
-            match val {
-                ListVal::Number(num) => num.modulate_to_string(),
-                ListVal::Cons(c) => match c.as_ref() {
-                    ConsList::Nil => String::from("00"),
-                    _ => c.as_ref().modulate_to_string(),
-                }
-            }
+        let mut cons_list = self;
+
+        enum Frame<'a> {
+            EvalCar { cdr_list_val: &'a ListVal, },
         }
 
-        match self {
-            ConsList::Nil => String::from("11"),
-            ConsList::Cons(v1, v2) => format!("11{}{}", modulate_val(v1), modulate_val(v2)),
+        let mut stack = vec![];
+        let mut modulated = String::new();
+        loop {
+            modulated.push_str("11");
+            let mut list_val = match cons_list {
+                ConsList::Nil =>
+                    return modulated,
+                ConsList::Cons(car_list_val, cdr_list_val) => {
+                    stack.push(Frame::EvalCar { cdr_list_val, });
+                    car_list_val
+                },
+            };
+
+            loop {
+                match list_val {
+                    ListVal::Number(number) =>
+                        modulated.push_str(&number.modulate_to_string()),
+                    ListVal::Cons(cons) =>
+                        if let ConsList::Nil = &**cons {
+                            modulated.push_str("00");
+                        } else {
+                            cons_list = cons;
+                            break;
+                        },
+                }
+
+                match stack.pop() {
+                    None =>
+                        return modulated,
+                    Some(Frame::EvalCar { cdr_list_val, }) =>
+                        list_val = cdr_list_val,
+                }
+            }
         }
     }
 }

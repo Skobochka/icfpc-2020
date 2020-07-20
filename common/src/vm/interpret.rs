@@ -1507,7 +1507,7 @@ impl Interpreter {
     }
 
     fn eval_send(&self, send_args: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNode>, Error> {
-        let send_args = self.eval_modem(send_args, env, cache)?;
+        let send_args = self.eval_mod(send_args, env, cache)?;
         let args_ops = send_args.render();
         let send_list_val = self.eval_ops_to_list_val(args_ops, env, cache)?;
         let send_cons_list = match send_list_val {

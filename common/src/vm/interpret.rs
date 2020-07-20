@@ -1706,20 +1706,23 @@ impl Interpreter {
             trans_ops.0.extend(child_ops.0);
 
             list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
-            match (list_ops.0.len(), list_ops.0.pop()) {
+            match (list_ops.0.len(), list_ops.0.first()) {
                 (_, None) =>
                     unreachable!(),
-                (1, Some(Op::Const(Const::EncodedNumber(number)))) => {
+                (1, Some(Op::Const(Const::EncodedNumber(..)))) => {
+                    let number = if let Op::Const(Const::EncodedNumber(number)) = list_ops.0.swap_remove(0) {
+                        number
+                    } else {
+                        unreachable!();
+                    };
                     let transformed = trans(number)?;
                     trans_ops.0.push(Op::Const(Const::EncodedNumber(transformed)));
                     return Ok(trans_ops);
                 },
-                (_, Some(Op::App)) =>
-                    list_ops.0.push(Op::App),
+                (_, Some(Op::App)) |
                 (_, Some(Op::Const(Const::Fun(Fun::Nil)))) =>
-                    list_ops.0.push(Op::Const(Const::Fun(Fun::Nil))),
-                (_, Some(last_item)) => {
-                    list_ops.0.push(last_item);
+                    (),
+                (_, Some(..)) => {
                     return Err(Error::InvalidConsListItem { ops: list_ops, });
                 },
             }

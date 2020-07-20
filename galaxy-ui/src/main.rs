@@ -386,8 +386,13 @@ fn main() {
                 Button::Mouse(MouseButton::Right) => { cursor.state = CursorState::Drag{ from: cursor.cursor, tm: std::time::Instant::now(), button: CursorButton::Right}; },
 
                 Button::Keyboard(Key::P) => {
+                    use rand::Rng;
+
                     let mut maybe_prev_pics = None;
-                    while let Some((x, y)) = prev_pixels.pop() {
+                    let mut rng = rand::thread_rng();
+                    while !prev_pixels.is_empty() {
+                        let index = rng.gen_range(0, prev_pixels.len());
+                        let (x, y) = prev_pixels.swap_remove(index);
                         if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
                             current = next(&mut session, ops, x, y);

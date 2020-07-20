@@ -1881,6 +1881,7 @@ impl Interpreter {
                     return Ok(trans_ops);
                 },
                 (_, Some(Op::App)) |
+                (_, Some(Op::Const(Const::ModulatedBits(..)))) |
                 (_, Some(Op::Const(Const::Fun(Fun::Nil)))) =>
                     (),
                 (_, Some(..)) => {

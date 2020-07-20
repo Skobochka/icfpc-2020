@@ -1,3 +1,5 @@
+use std::{io, fs};
+
 use glutin_window::{
     GlutinWindow as Window,
 };
@@ -21,6 +23,11 @@ use futures::{
         mpsc::unbounded,
     },
     StreamExt,
+};
+
+use serde_derive::{
+    Serialize,
+    Deserialize,
 };
 
 use common::{
@@ -122,7 +129,40 @@ fn render(session: &mut Session, ops: &Ops) {
     }
 }
 
-fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
+#[derive(Serialize, Deserialize)]
+struct GalaxyState {
+    state: Ops,
+    last_click: (i64, i64),
+}
+
+#[derive(Debug)]
+enum GalaxyStateError {
+    FileCreate(io::Error),
+    SerdeWrite(serde_json::Error),
+    FileOpen(io::Error),
+    SerdeRead(serde_json::Error),
+}
+
+impl GalaxyState {
+    fn save(&self) -> Result<(), GalaxyStateError> {
+        let file = fs::File::create("./galaxy-state.json")
+            .map_err(GalaxyStateError::FileCreate)?;
+        let writer = io::BufWriter::new(file);
+        serde_json::to_writer(writer, self)
+            .map_err(GalaxyStateError::SerdeWrite)?;
+        Ok(())
+    }
+
+    fn load() -> Result<GalaxyState, GalaxyStateError> {
+        let file = fs::File::open("./galaxy-state.json")
+            .map_err(GalaxyStateError::FileOpen)?;
+        let reader = io::BufReader::new(file);
+        serde_json::from_reader(reader)
+            .map_err(GalaxyStateError::SerdeRead)
+    }
+}
+
+fn next(session: &mut Session, ops: Ops, x: i64, y: i64, valid_state: &mut GalaxyState) -> Option<Ops> {
     //ap ap ap interact galaxy nil ap ap vec 0 0
 
     let mut state_ops = Ops(vec![
@@ -147,7 +187,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
         Op::Const(Const::Fun(Fun::Interact)),
         Op::Const(Const::Fun(Fun::Galaxy)),
     ]);
-    nops.0.extend(state_list_ops.0);
+    nops.0.extend(state_list_ops.0.clone());
     nops.0.extend(vec![
         Op::App,
         Op::App,
@@ -171,7 +211,11 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
     // println!("evaluating: {:?}", nops);
 
     match session.eval_ops(nops.clone()) {
-        Ok(ops) => { Some(ops) },
+        Ok(ops) => {
+            valid_state.state = state_list_ops;
+            valid_state.last_click = (x, y);
+            Some(ops)
+        },
         Err(e) => {
             println!("Error in next: {:?}",e);
             println!("nops: {:?}", nops);
@@ -296,6 +340,10 @@ fn main() {
 
     let mut prev_pixels = vec![];
     let mut pictures_incoming = None;
+    let mut valid_state = GalaxyState {
+        state: Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
+        last_click: (0, 0),
+    };
 
     while let Some(e) = events.next(&mut window) {
        //println!("[{:?}] {:.3} {:?}",start.elapsed(),app.rotation,e);
@@ -360,7 +408,7 @@ fn main() {
 
                         if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
-                            current = next(&mut session, ops, coo[0] as i64, coo[1] as i64);
+                            current = next(&mut session, ops, coo[0] as i64, coo[1] as i64, &mut valid_state);
                             //current = next(&mut session, ops,0,0);
                             println!("Next step:   {:?}",t.elapsed());
                             if let Some(ops) = &current {
@@ -395,7 +443,7 @@ fn main() {
                         let (x, y) = prev_pixels.swap_remove(index);
                         if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
-                            current = next(&mut session, ops, x, y);
+                            current = next(&mut session, ops, x, y, &mut valid_state);
                             println!("Next step for ({}, {}):   {:?}", x, y, t.elapsed());
                             if let Some(ops) = &current {
                                 let t = std::time::Instant::now();
@@ -422,6 +470,28 @@ fn main() {
                                 },
                             }
                         }
+                    }
+                },
+                Button::Keyboard(Key::N) => {
+                    println!("saving current galaxy state");
+                    if let Err(error) = valid_state.save() {
+                        println!(" !! failed to save state: {:?}", error);
+                    }
+                },
+                Button::Keyboard(Key::M) => {
+                    println!("loading current galaxy state");
+                    match GalaxyState::load() {
+                        Ok(galaxy_state) => {
+                            current = next(
+                                &mut session,
+                                galaxy_state.state,
+                                galaxy_state.last_click.0,
+                                galaxy_state.last_click.1,
+                                &mut valid_state,
+                            );
+                        },
+                        Err(error) =>
+                            println!(" !! failed to load state: {:?}", error),
                     }
                 },
 

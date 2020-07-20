@@ -82,8 +82,8 @@ pub enum GameRequest {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct GameResponse {
     pub stage: GameStage,
-    pub static_info: GameStaticInfo,
-    pub state: GameState,
+    pub static_info: Option<GameStaticInfo>,
+    pub state: Option<GameState>,
 }
 
 pub struct GameRound {
@@ -293,18 +293,26 @@ impl GameRound {
         Ok(result)
     }
 
-    pub fn parse_game_state(resp: &ConsList) -> Result<GameState, Error> {
+    pub fn parse_game_state(resp: &ConsList) -> Result<Option<GameState>, Error> {
+        if let ConsList::Nil = resp {
+            return Ok(None)
+        }
+
         let game_tick = resp.car().as_encoded_number().as_isize() as usize;
         let x1_raw = resp.cdr().as_cons().car().to_pretty_string();
         let ships_n_commands = GameRound::parse_ships_n_commands(resp.cdr().as_cons().cdr().as_cons().car().as_cons())?;
-        Ok(GameState {
+        Ok(Some(GameState {
             game_tick,
             x1_raw,
             ships_n_commands,
-        })
+        }))
     }
 
-    pub fn parse_static_game_info(resp: &ConsList) -> Result<GameStaticInfo, Error> {
+    pub fn parse_static_game_info(resp: &ConsList) -> Result<Option<GameStaticInfo>, Error> {
+        if let ConsList::Nil = resp {
+            return Ok(None)
+        }
+
         let x0_raw = resp.car().to_pretty_string();
 
         let role_int = resp.cdr().as_cons().car().as_encoded_number().as_isize();
@@ -313,7 +321,7 @@ impl GameRound {
         let x3_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
         let x4_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
 
-        Ok(GameStaticInfo {
+        Ok(Some(GameStaticInfo {
             x0_raw,
             role: match role_int {
                 0 => Role::Attacker,
@@ -323,7 +331,7 @@ impl GameRound {
             x2_raw,
             x3_raw,
             x4_raw,
-        })
+        }))
     }
 
     pub fn parse_game_response_from_string(input: &str) -> Result<GameResponse, Error> {
@@ -365,6 +373,9 @@ mod tests {
         assert_eq!(GameRound::parse_game_response_from_string(resp1).is_ok(), true);
         let resp2 = "1101100001110110000111110111100001000000001101100001111101111000011100000011011000011101110010000000011110111000010000110111010000000001100001111011000111111011100001000011011101000000000111111110110000111010111110110001010101010111011110110001101011110101101011010110110000100110101101110010000001101100001001100001111110101101100001111101110001001000111000010100111110100110011000111111011100011110111011100100000011011010101101100001001101011011100100000011011000010011111101011110110000110100001000000000000";
         assert_eq!(GameRound::parse_game_response_from_string(resp2).is_ok(), true);
+        let resp3 = "110110000111011000101100110000";
+        println!("resp3: {}", GameRound::format_modulated(resp3));
+        assert_eq!(GameRound::parse_game_response_from_string(resp3).is_ok(), true);
     }
 
     #[test]

@@ -610,8 +610,11 @@ impl Interpreter {
                     },
 
                     // IsNil on a number
-                    (State::EvalAppArgIsNil, EvalOp::Num { number, }) =>
-                        return Err(Error::IsNilAppOnANumber { number, }),
+                    (State::EvalAppArgIsNil, EvalOp::Num { .. }) => {
+                        ast_node = Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), }));
+                        cache.memo(root, ast_node.clone());
+                        break;
+                    },
 
                     // IsNil on a Nil0
                     (State::EvalAppArgIsNil, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
@@ -797,6 +800,7 @@ impl Interpreter {
                     // Send0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
                         ast_node = self.eval_send(arg, env, cache)?;
+                        cache.memo(root, ast_node.clone());
                         break;
                     },
 
@@ -1761,9 +1765,12 @@ impl Interpreter {
     fn eval_num_list_map<F>(&self, list_ast: Rc<AstNodeH>, trans: &F, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error>
     where F: Fn(&EncodedNumber) -> Result<EncodedNumber, Error>
     {
+        let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
+        if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
+            return Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), })));
+        }
+
         match &list_ast.kind {
-            AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), } =>
-                Ok(list_ast),
             AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } => {
                 let transformed = trans(number)?;
                 Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(transformed)), })))

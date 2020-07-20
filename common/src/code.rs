@@ -55,6 +55,17 @@ pub struct EncodedNumber {
     pub modulation: Modulation,
 }
 
+impl EncodedNumber {
+    pub fn as_isize(&self) -> isize {
+        match self {
+            EncodedNumber { number: Number::Positive (PositiveNumber { value }), modulation: _ }
+              => *value as isize,
+            EncodedNumber { number: Number::Negative (NegativeNumber { value }), modulation: _ }
+              => *value,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum Modulation {
     Modulated,

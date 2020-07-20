@@ -1420,6 +1420,26 @@ impl Interpreter {
         }
     }
 
+    pub fn eval_force_list(&self, mut list_ops: Ops, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
+        let mut forced_ops = Ops(Vec::new());
+        loop {
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
+            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+                break;
+            }
+
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
+            forced_ops.0.push(Op::App);
+            forced_ops.0.push(Op::App);
+            forced_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
+            forced_ops.0.extend(ops.0);
+
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
+        }
+        forced_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
+        Ok(forced_ops)
+    }
+
     fn eval_draw(&self, points: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Picture, Error> {
         let mut points_vec = Vec::new();
         let mut points_ops = points.render();

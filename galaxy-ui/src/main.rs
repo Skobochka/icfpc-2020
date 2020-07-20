@@ -312,7 +312,7 @@ fn main() {
                     };
                     app.cursor(cursor);
                     {
-                        let _coo = app.main.scene.get_cursor().cursor;
+                        let coo = app.main.scene.get_cursor().cursor;
                         //let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
                         //let nasm = "ap render ap car ap cdr ap ap ap interact galaxy ap ap cons 0 ap ap cons ap ap cons 0 nil ap ap cons 0 ap ap cons nil nil ap ap vec 0 0";
                         //asm(&mut session, nasm);
@@ -320,8 +320,8 @@ fn main() {
 
                         if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
-                            //current = next(&mut session, ops, coo[0] as i64, coo[1] as i64);
-                            current = next(&mut session, ops,0,0);
+                            current = next(&mut session, ops, coo[0] as i64, coo[1] as i64);
+                            //current = next(&mut session, ops,0,0);
                             println!("Next step:   {:?}",t.elapsed());
                             if let Some(ops) = &current {
                                 let t = std::time::Instant::now();

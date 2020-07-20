@@ -122,7 +122,16 @@ fn render_first(session: &mut Session, ops: &Ops) -> Option<Ops> {
     ];
     nops.extend(ops.0.iter().map(|o|o.clone()));
     match session.eval_ops(Ops(nops)) {
-        Ok(ops) => Some(ops),
+        Ok(ops) => {
+            match ops.0.len() {
+                0 => None,                
+                1 => match &ops.0[0] {
+                    Op::Const(Const::Fun(Fun::Nil)) => None,
+                    _ => Some(ops),
+                },
+                _ => Some(ops),
+            }
+        },
         Err(e) => {
             println!("Error in render_first: {:?}",e);
             None
@@ -137,7 +146,16 @@ fn render_next(session: &mut Session, ops: &Ops) -> Option<Ops> {
     ];
     nops.extend(ops.0.iter().map(|o|o.clone()));
     match session.eval_ops(Ops(nops)) {
-        Ok(ops) => Some(ops),
+        Ok(ops) => {
+            match ops.0.len() {
+                0 => None,                
+                1 => match &ops.0[0] {
+                    Op::Const(Const::Fun(Fun::Nil)) => None,
+                    _ => Some(ops),
+                },
+                _ => Some(ops),
+            }
+        },
         Err(e) => {
             println!("Error in render_next: {:?}",e);
             None
@@ -428,27 +446,7 @@ fn main() {
                     };
                     app.cursor(cursor);
                     {
-                        // let coo = app.main.scene.get_cursor().cursor;
-                        //let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
-                        //let nasm = "ap render ap car ap cdr ap ap ap interact galaxy ap ap cons 0 ap ap cons ap ap cons 0 nil ap ap cons 0 ap ap cons nil nil ap ap vec 0 0";
-                        //asm(&mut session, nasm);
-
-
-                        /*if let Some(ops) = current.take() {
-                            let t = std::time::Instant::now();
-                            if let Some(state_list_ops) = extract_state(&mut session, ops) {
-                                current = next(&mut session, state_list_ops, coo[0] as i64, coo[1] as i64, &mut valid_state);
-                            }
-                            //current = next(&mut session, ops,0,0);
-                            println!("Next step:   {:?}",t.elapsed());
-                            if let Some(ops) = &current {
-                                let t = std::time::Instant::now();
-                                render(&mut session,ops);
-                                println!("     render: {:?}",t.elapsed());
-                            }
-                        }*/
-
-                        //println!("Click: {:?}",app.main.scene.get_cursor());
+                        
                     }
                     cursor.state = CursorState::None;
                 },

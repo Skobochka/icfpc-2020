@@ -184,7 +184,7 @@ pub struct Cache {
 impl Cache {
     pub fn new() -> Cache {
         Cache {
-            memo: LruCache::new(128 * 1024),
+            memo: LruCache::new(64 * 1024),
         }
     }
 

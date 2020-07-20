@@ -94,12 +94,13 @@ impl Data {
 
 fn asm(session: &mut Session, asm: &str) -> Option<Ops> {
     //println!("ASM: {}",asm);
-    match session.eval_asm(asm) {
+    match session.eval_asm(asm.clone()) {
         Ok(ops) => {
             Some(ops)
         },
         Err(e) => {
-            println!("Error: {:?}",e);
+            println!("Error in asm: {:?}", e);
+            println!("Asm: {:?}", asm);
             None
         },
     }
@@ -116,7 +117,7 @@ fn render(session: &mut Session, ops: &Ops) {
     match session.eval_ops(Ops(nops)) {
         Ok(_) => {},
         Err(e) => {
-            println!("Error: {:?}",e);
+            println!("Error in render: {:?}",e);
         },
     }
 }
@@ -129,11 +130,12 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
         Op::Const(Const::Fun(Fun::Car)),
     ]);
     state_ops.0.extend(ops.0);
-    let state_list_ops = match session.eval_force_list(state_ops) {
+    let state_list_ops = match session.eval_force_list(state_ops.clone()) {
         Ok(ops) =>
             ops,
         Err(e) => {
-            println!("Error: {:?}",e);
+            println!("Error in next: {:?}",e);
+            println!("state_ops: {:?}", state_ops);
             return None;
         },
     };
@@ -168,10 +170,11 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
 
     // println!("evaluating: {:?}", nops);
 
-    match session.eval_ops(nops) {
+    match session.eval_ops(nops.clone()) {
         Ok(ops) => { Some(ops) },
         Err(e) => {
-            println!("Error: {:?}",e);
+            println!("Error in next: {:?}",e);
+            println!("nops: {:?}", nops);
             None
         },
     }
@@ -328,7 +331,7 @@ fn main() {
                     let datas = Data::from_pics(pics);
                     // println!("got {} pictures",datas.len());
                     for data in datas {
-                        println!("{:?}",data);
+                        // println!("{:?}",data);
                         app.main.scene.map.next_data(&data);
                     }
                 }

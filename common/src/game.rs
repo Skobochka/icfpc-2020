@@ -96,10 +96,10 @@ impl GameRound {
         let position_enc = resp.cdr().as_cons().cdr().as_cons().car().as_tuple();
         let velocity_enc = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().car().as_tuple();
 
-        let x4_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car());
-        let x5_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car());
-        let x6_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car());
-        let x7_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car());
+        let x4_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
+        let x5_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
+        let x6_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
+        let x7_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
 
         Ok(Ship {
             role: match role_int {
@@ -128,7 +128,7 @@ impl GameRound {
             1 => Ok(Command::Detonate),
             2 => {
                 let vec_enc = resp.cdr().as_cons().car().as_tuple();
-                let x3_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().car());
+                let x3_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
 
                 Ok(Command::Shoot { target: Vec2 { x: vec_enc.0.as_isize(), y: vec_enc.1.as_isize() },
                                     x3_raw })
@@ -168,7 +168,7 @@ impl GameRound {
 
     pub fn parse_game_state(resp: &ConsList) -> Result<GameState, Error> {
         let game_tick = resp.car().as_encoded_number().as_isize() as usize;
-        let x1_raw = format!("{:?}", resp.cdr().as_cons().car());
+        let x1_raw = resp.cdr().as_cons().car().to_pretty_string();
         let ships_n_commands = GameRound::parse_ships_n_commands(resp.cdr().as_cons().cdr().as_cons().car().as_cons())?;
         Ok(GameState {
             game_tick,
@@ -178,13 +178,13 @@ impl GameRound {
     }
 
     pub fn parse_static_game_info(resp: &ConsList) -> Result<GameStaticInfo, Error> {
-        let x0_raw = format!("{:?}", resp.car());
+        let x0_raw = resp.car().to_pretty_string();
 
         let role_int = resp.cdr().as_cons().car().as_encoded_number().as_isize();
 
-        let x2_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().car());
-        let x3_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().car());
-        let x4_raw = format!("{:?}", resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car());
+        let x2_raw = resp.cdr().as_cons().cdr().as_cons().car().to_pretty_string();
+        let x3_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
+        let x4_raw = resp.cdr().as_cons().cdr().as_cons().cdr().as_cons().cdr().as_cons().car().to_pretty_string();
 
         Ok(GameStaticInfo {
             x0_raw,

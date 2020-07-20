@@ -286,6 +286,8 @@ dependencies = [
  "lru",
  "pest",
  "pest_derive",
+ "serde",
+ "serde_derive",
  "tokio",
 ]
 

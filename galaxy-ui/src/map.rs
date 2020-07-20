@@ -110,7 +110,7 @@ impl DotsXYT {
             sy: sy,
             mx: mx,
             my: my,
-            dtm: 0.25,
+            dtm: 0.1,
             dots: v,
         }
     }

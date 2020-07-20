@@ -418,7 +418,7 @@ fn main() {
 
                     let datas = Data::from_pics(pics);
                     //
-                    // println!("got {} pictures",datas.len());
+                    println!("got {} pictures",datas.len());
                     for i in 0 .. datas.len() {
                         // println!("{:?}",data);
                         app.main.scene.map.next_data(&datas[datas.len() -1 -i ]);

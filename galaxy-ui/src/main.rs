@@ -358,7 +358,7 @@ fn main() {
                         //asm(&mut session, nasm);
 
 
-                        if let Some(ops) = current.take() {
+                        /*if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
                             current = next(&mut session, ops, coo[0] as i64, coo[1] as i64);
                             //current = next(&mut session, ops,0,0);
@@ -368,7 +368,7 @@ fn main() {
                                 render(&mut session,ops);
                                 println!("     render: {:?}",t.elapsed());
                             }
-                        }
+                        }*/
 
                         //println!("Click: {:?}",app.main.scene.get_cursor());
                     }
@@ -384,7 +384,22 @@ fn main() {
                 Button::Keyboard(Key::LCtrl) => { cursor.scroll_to_scale = true; },
                 Button::Mouse(MouseButton::Left) => { cursor.state = CursorState::Drag{ from: cursor.cursor, tm: std::time::Instant::now(), button: CursorButton::Left}; },
                 Button::Mouse(MouseButton::Right) => { cursor.state = CursorState::Drag{ from: cursor.cursor, tm: std::time::Instant::now(), button: CursorButton::Right}; },
-
+                Button::Keyboard(Key::Q) => {
+                    app.cursor(cursor);
+                    let coo = app.main.scene.get_cursor().cursor;
+                    if let Some(ops) = current.take() {
+                        let t = std::time::Instant::now();
+                        current = next(&mut session, ops, coo[0] as i64, coo[1] as i64);
+                        //current = next(&mut session, ops,0,0);
+                        println!("Next step ({:?}):   {:?}",coo,t.elapsed());
+                        if let Some(ops) = &current {
+                            let t = std::time::Instant::now();
+                            render(&mut session,ops);
+                            println!("     render: {:?}",t.elapsed());
+                        }
+                        println!("waiting for next 'q'...");
+                    }
+                },
                 Button::Keyboard(Key::P) => {
                     use rand::Rng;
 
@@ -517,7 +532,7 @@ impl Scene {
         let current = self.current_map_size();
         let ws = self.scale * (self.map.size.size_x.1 - self.map.size.size_x.0)/(current.size_x.1 - current.size_x.0);
         let hs = self.scale * (self.map.size.size_y.1 - self.map.size.size_y.0)/(current.size_y.1 - current.size_y.0);
-        let max_scale = f64::min(f64::min(ws,hs),100.0);
+        let max_scale = f64::min(f64::min(ws,hs),200.0);
 
         if (self.scale + tmp) > max_scale { tmp = max_scale - self.scale; }
         let pscale = self.scale;

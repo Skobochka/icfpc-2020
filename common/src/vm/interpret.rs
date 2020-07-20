@@ -78,7 +78,7 @@ pub enum Error {
     ListSyntaxSeveralCommas,
     ListSyntaxClosingAfterComma,
     InvalidCoordForDrawArg,
-    ExpectedListArgForSendButGotNumber { number: EncodedNumber, },
+    ExpectedListArgForModButGotNumber { number: EncodedNumber, },
     ConsListDem(encoder::Error),
     SendOpIsNotSupportedWithoutOuterChannel,
     RenderOpIsNotSupportedWithoutOuterChannel,
@@ -97,7 +97,7 @@ pub enum Error {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Ast {
     Empty,
-    Tree(AstNodeH),
+    Tree(Rc<AstNodeH>),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -138,8 +138,8 @@ pub enum AstNode {
 
 #[derive(Debug)]
 pub struct Env {
-    forward: HashMap<AstNodeH, AstNodeH>,
-    backward: HashMap<AstNodeH, AstNodeH>,
+    forward: HashMap<Rc<AstNodeH>, Rc<AstNodeH>>,
+    backward: HashMap<Rc<AstNodeH>, Rc<AstNodeH>>,
 }
 
 impl Env {
@@ -161,7 +161,7 @@ impl Env {
         }
     }
 
-    pub fn lookup_ast(&self, key: &AstNodeH) -> Option<&AstNodeH> {
+    pub fn lookup_ast(&self, key: &Rc<AstNodeH>) -> Option<&Rc<AstNodeH>> {
         match self.forward.get(key) {
             Some(o) => {
                 Some(o)
@@ -225,9 +225,9 @@ impl Interpreter {
     }
 
     pub fn make_prev_variable_ast(&self) -> Ast {
-        Ast::Tree(AstNodeH::new(
+        Ast::Tree(Rc::new(AstNodeH::new(
             AstNode::Literal { value: Op::Variable(Variable { name: Number::Negative(NegativeNumber { value: -2, }), }), },
-        ))
+        )))
     }
 
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
@@ -275,7 +275,7 @@ impl Interpreter {
                     (None, None) =>
                         return Ok(Ast::Empty),
                     (None, Some(node)) =>
-                        return Ok(Ast::Tree(node)),
+                        return Ok(Ast::Tree(Rc::new(node))),
                     (Some(State::AwaitAppFun), None) =>
                         return Err(Error::NoAppFunProvided),
                     (Some(State::AwaitAppFun), Some(node)) => {
@@ -374,13 +374,12 @@ impl Interpreter {
         }
     }
 
-    fn eval_tree(&self, ast_node: AstNodeH, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
+    fn eval_tree(&self, ast_node: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
         let ast_node = self.eval_tree_ast(ast_node, env, cache)?;
         Ok(ast_node.render())
     }
 
-    fn eval_tree_ast(&self, ast_node: AstNodeH, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let mut ast_node = Rc::new(ast_node);
+    fn eval_tree_ast(&self, mut ast_node: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
 
         enum State {
             EvalAppFun { arg: Rc<AstNodeH>, },
@@ -420,7 +419,7 @@ impl Interpreter {
                             EvalOp::Abs(top_ast_node) => {
                                 match env.lookup_ast(&top_ast_node) {
                                     Some(subst_ast_node) => {
-                                        ast_node = Rc::new(subst_ast_node.clone());
+                                        ast_node = subst_ast_node.clone();
                                         break;
                                     },
                                     None =>
@@ -633,7 +632,7 @@ impl Interpreter {
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
                                 states.push(StackFrame { root, state: State::EvalAppArgIsNil, });
-                                ast_node = Rc::new(subst_ast_node.clone());
+                                ast_node = subst_ast_node.clone();
                                 break;
                             },
                             None =>
@@ -679,7 +678,7 @@ impl Interpreter {
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
                                 states.push(StackFrame { root, state: State::EvalAppArgCar, });
-                                ast_node = Rc::new(subst_ast_node.clone());
+                                ast_node = subst_ast_node.clone();
                                 break;
                             },
                             None =>
@@ -725,7 +724,7 @@ impl Interpreter {
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
                                 states.push(StackFrame { root, state: State::EvalAppArgCdr, });
-                                ast_node = Rc::new(subst_ast_node.clone());
+                                ast_node = subst_ast_node.clone();
                                 break;
                             },
                             None =>
@@ -854,7 +853,7 @@ impl Interpreter {
                         match env.lookup_ast(&fun_ast_node) {
                             Some(subst_ast_node) => {
                                 ast_node = Rc::new(AstNodeH::new(AstNode::App {
-                                    fun: Rc::new(subst_ast_node.clone()),
+                                    fun: subst_ast_node.clone(),
                                     arg: arg_ast_node,
                                 }));
                                 break;
@@ -1544,7 +1543,7 @@ impl Interpreter {
                         match env.lookup_ast(&arg_ast_node) {
                             Some(subst_ast_node) => {
                                 states.push(StackFrame { root, state: State::EvalAppArgNum { fun, }, });
-                                ast_node = Rc::new(subst_ast_node.clone());
+                                ast_node = subst_ast_node.clone();
                                 break;
                             },
                             None => {
@@ -1577,147 +1576,135 @@ impl Interpreter {
         }
     }
 
-    pub fn eval_force_list(&self, mut list_ops: Ops, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
-        let mut forced_ops = Ops(Vec::new());
-        loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
-            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
-                break;
-            }
-
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
-            forced_ops.0.push(Op::App);
-            forced_ops.0.push(Op::App);
-            forced_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
-            forced_ops.0.extend(ops.0);
-
-            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
+    pub fn eval_force_list(&self, list_ops: Ops, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
+        match self.build_tree(list_ops)? {
+            Ast::Empty =>
+                Ok(Ops(vec![])),
+            Ast::Tree(ast_node) =>
+                Ok(self.eval_force_list_ast(ast_node, env, cache)?.render()),
         }
-        forced_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
-        Ok(forced_ops)
     }
 
-    fn eval_draw(&self, points: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Picture, Error> {
+    fn eval_force_list_ast(&self, list_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        let force_list_val = self.eval_ast_to_list_val(list_ast, env, cache)?;
+        let force_cons_list = match force_list_val {
+            encoder::ListVal::Number(number) =>
+                return Err(Error::ExpectedListArgForModButGotNumber { number, }),
+            encoder::ListVal::Cons(value) =>
+                *value,
+        };
+        let bits = force_cons_list.modulate_to_string();
+        Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::ModulatedBits(bits)), })))
+    }
+
+    fn eval_draw(&self, mut points_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Picture, Error> {
         let mut points_vec = Vec::new();
-        let mut points_ops = points.render();
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &points_ops, env, cache)?;
-            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+            let ast_node = self.eval_ast_on(self.eval_isnil(), points_ast.clone(), env, cache)?;
+            if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
                 break;
             }
 
-            let coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env, cache)?;
+            let coord_ast = self.eval_ast_on(self.eval_car(), points_ast.clone(), env, cache)?;
 
-            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env, cache)?;
-            let coord_a = match (ops.0.len(), ops.0.pop()) {
-                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
-                    number,
-                _ =>
-                    return Err(Error::InvalidCoordForDrawArg),
+            let ast_node = self.eval_ast_on(self.eval_car(), coord_ast.clone(), env, cache)?;
+            let x = if let AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } = &ast_node.kind {
+                number.clone()
+            } else {
+                return Err(Error::InvalidCoordForDrawArg);
             };
-            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env, cache)?;
-            let coord_b = match (ops.0.len(), ops.0.pop()) {
-                (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
-                    number,
-                _ =>
-                    return Err(Error::InvalidCoordForDrawArg),
-            };
-            points_vec.push(Coord {
-                x: coord_a,
-                y: coord_b,
-            });
 
-            points_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &points_ops, env, cache)?;
+            let ast_node = self.eval_ast_on(self.eval_cdr(), coord_ast.clone(), env, cache)?;
+            let y = if let AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } = &ast_node.kind {
+                number.clone()
+            } else {
+                return Err(Error::InvalidCoordForDrawArg);
+            };
+
+            points_vec.push(Coord { x, y, });
+
+            points_ast = self.eval_ast_on(self.eval_cdr(), points_ast, env, cache)?;
         }
         Ok(Picture { points: points_vec, })
     }
 
-    fn eval_multiple_draw(&self, points_list_of_lists: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let mut list_ops = points_list_of_lists.render();
-
-        let mut output_ops = Ops(vec![]);
+    fn eval_multiple_draw(&self, mut points_list_of_lists: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        let mut asts = vec![];
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
-            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+            let ast_node = self.eval_ast_on(self.eval_isnil(), points_list_of_lists.clone(), env, cache)?;
+            if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
                 break;
             }
 
-            let child_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
-            output_ops.0.push(Op::App);
-            output_ops.0.push(Op::App);
-            output_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
-            output_ops.0.push(Op::App);
-            output_ops.0.push(Op::Const(Const::Fun(Fun::Draw)));
-            output_ops.0.extend(child_ops.0);
+            let ast_node = self.eval_ast_on(self.eval_car(), points_list_of_lists.clone(), env, cache)?;
+            asts.push(Rc::new(AstNodeH::new(AstNode::App {
+                fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Draw)), })),
+                arg: ast_node,
+            })));
 
-            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
-
+            points_list_of_lists = self.eval_ast_on(self.eval_cdr(), points_list_of_lists, env, cache)?;
         }
-        output_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
 
-        match self.build_tree(output_ops)? {
-            Ast::Empty =>
-                unreachable!(), // we should got at least nil
-            Ast::Tree(ast_node) =>
-                Ok(Rc::new(ast_node)),
+        let mut ast_node = Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), }));
+        while let Some(cell_ast) = asts.pop() {
+            ast_node = Rc::new(AstNodeH::new(AstNode::App {
+                fun: Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), })),
+                    arg: cell_ast,
+                })),
+                arg: ast_node,
+            }));
+        }
+        Ok(ast_node)
+    }
+
+    fn eval_send(&self, send_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        match &self.eval_force_list_ast(send_ast, env, cache)?.kind {
+            AstNode::Literal { value: Op::Const(Const::ModulatedBits(bits)), } => {
+                let send_mod = bits.clone();
+                // perform send
+                let recv_mod = if let Some(outer_channel) = &self.outer_channel {
+                    let (tx, rx) = mpsc::channel();
+
+                    let outer_send_result = outer_channel.unbounded_send(OuterRequest::ProxySend {
+                        modulated_req: send_mod,
+                        modulated_rep: tx,
+                    });
+                    if let Err(..) = outer_send_result {
+                        return Err(Error::OuterChannelIsClosed);
+                    }
+
+                    match rx.recv() {
+                        Ok(response) =>
+                            response,
+                        Err(..) =>
+                            return Err(Error::OuterChannelIsClosed),
+                    }
+                } else {
+                    return Err(Error::SendOpIsNotSupportedWithoutOuterChannel);
+                };
+
+                Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::ModulatedBits(recv_mod)), })))
+            },
+            _ =>
+                unreachable!(),
         }
     }
 
-    fn eval_send(&self, send_args: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let send_args = self.eval_mod(send_args, env, cache)?;
-        let args_ops = send_args.render();
-        let send_list_val = self.eval_ops_to_list_val(args_ops, env, cache)?;
-        let send_cons_list = match send_list_val {
-            encoder::ListVal::Number(number) =>
-                return Err(Error::ExpectedListArgForSendButGotNumber { number, }),
-            encoder::ListVal::Cons(value) =>
-                *value,
-        };
-        let send_mod = send_cons_list.modulate_to_string();
-
-        // perform send
-        let recv_mod = if let Some(outer_channel) = &self.outer_channel {
-            let (tx, rx) = mpsc::channel();
-
-            let outer_send_result = outer_channel.unbounded_send(OuterRequest::ProxySend {
-                modulated_req: send_mod,
-                modulated_rep: tx,
-            });
-            if let Err(..) = outer_send_result {
-                return Err(Error::OuterChannelIsClosed);
-            }
-
-            match rx.recv() {
-                Ok(response) =>
-                    response,
-                Err(..) =>
-                    return Err(Error::OuterChannelIsClosed),
-            }
-        } else {
-            return Err(Error::SendOpIsNotSupportedWithoutOuterChannel);
-        };
-
-        Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::ModulatedBits(recv_mod)), })))
-    }
-
-    fn eval_render(&self, render_args: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let mut render_ops = render_args.render();
-
+    fn eval_render(&self, mut render_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &render_ops, env, cache)?;
-            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+            let ast_node = self.eval_ast_on(self.eval_isnil(), render_ast.clone(), env, cache)?;
+            if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
                 break;
             }
 
-            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &render_ops, env, cache)?;
-            match (ops.0.len(), ops.0.pop()) {
-                (_, None) =>
-                    unreachable!(),
-                (1, Some(Op::Const(Const::Picture(picture)))) => {
+            let ast_node = self.eval_ast_on(self.eval_car(), render_ast.clone(), env, cache)?;
+            match &ast_node.kind {
+                AstNode::Literal { value: Op::Const(Const::Picture(picture)), } => {
                     // perform send
                     if let Some(outer_channel) = &self.outer_channel {
                         let outer_send_result = outer_channel.unbounded_send(OuterRequest::RenderPictures {
-                            pictures: vec![picture],
+                            pictures: vec![picture.clone()],
                         });
                         if let Err(..) = outer_send_result {
                             return Err(Error::OuterChannelIsClosed);
@@ -1726,150 +1713,87 @@ impl Interpreter {
                         return Err(Error::RenderOpIsNotSupportedWithoutOuterChannel);
                     };
                 },
-                (_, Some(last_item)) => {
-                    ops.0.push(last_item);
-                    return Err(Error::RenderItemIsNotAPicture { ops, });
-                },
+                _ =>
+                    return Err(Error::RenderItemIsNotAPicture { ops: ast_node.render(), }),
             }
 
-            let mut next_render_ops = Ops(vec![
-                Op::App,
-                Op::Const(Const::Fun(Fun::Cdr)),
-            ]);
-            next_render_ops.0.extend(render_ops.0);
-            render_ops = next_render_ops;
-            // render_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &render_ops, env, cache)?;
+            render_ast = self.eval_ast_on(self.eval_cdr(), render_ast, env, cache)?;
             break;
         }
 
-        match self.build_tree(render_ops)? {
-            Ast::Empty =>
-                unreachable!(), // should return at least nil
-            Ast::Tree(ast_node) =>
-                Ok(Rc::new(ast_node)),
-        }
+        Ok(render_ast)
     }
 
-    fn eval_mod(&self, args: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let args_ops = args.render();
-        let ops = self.eval_num_list_map(args_ops, &|num| match num {
+    fn eval_mod(&self, ast_node: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        self.eval_num_list_map(ast_node, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Demodulated, } =>
-                Ok(EncodedNumber { number, modulation: Modulation::Modulated, }),
+                Ok(EncodedNumber { number: number.clone(), modulation: Modulation::Modulated, }),
             number @ EncodedNumber { modulation: Modulation::Modulated, .. } =>
-                Err(Error::ModOnModulatedNumber { number, }),
-        }, env, cache)?;
-
-        match self.build_tree(ops)? {
-            Ast::Empty =>
-                unreachable!(), // eval_num_list_map should return at least nil
-            Ast::Tree(ast_node) =>
-                Ok(Rc::new(ast_node)),
-        }
+                Err(Error::ModOnModulatedNumber { number: number.clone(), }),
+        }, env, cache)
     }
 
-    fn eval_dem(&self, args: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let args_ops = args.render();
-        let ops = self.eval_num_list_map(args_ops, &|num| match num {
+    fn eval_dem(&self, ast_node: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        self.eval_num_list_map(ast_node, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Modulated, } =>
-                Ok(EncodedNumber { number, modulation: Modulation::Demodulated, }),
+                Ok(EncodedNumber { number: number.clone(), modulation: Modulation::Demodulated, }),
             number @ EncodedNumber { modulation: Modulation::Demodulated, .. } =>
-                Err(Error::DemOnDemodulatedNumber { number, }),
-        }, env, cache)?;
-
-        match self.build_tree(ops)? {
-            Ast::Empty =>
-                unreachable!(), // eval_num_list_map should return at least nil
-            Ast::Tree(ast_node) =>
-                Ok(Rc::new(ast_node)),
-        }
+                Err(Error::DemOnDemodulatedNumber { number: number.clone(), }),
+        }, env, cache)
     }
 
-    fn eval_modem(&self, ast_node: Rc<AstNodeH>, _env: &Env, _cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        // let ast_node = self.eval_mod(ast_node, env, cache)?;
-        // let ast_node = self.eval_dem(ast_node, env, cache)?;
+    fn eval_modem(&self, ast_node: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        let ast_node = self.eval_mod(ast_node, env, cache)?;
+        let ast_node = self.eval_dem(ast_node, env, cache)?;
         Ok(ast_node)
     }
 
-    fn eval_num_list_map<F>(&self, mut list_ops: Ops, trans: &F, env: &Env, cache: &mut Cache) -> Result<Ops, Error>
-    where F: Fn(EncodedNumber) -> Result<EncodedNumber, Error>
+    fn eval_num_list_map<F>(&self, list_ast: Rc<AstNodeH>, trans: &F, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error>
+    where F: Fn(&EncodedNumber) -> Result<EncodedNumber, Error>
     {
-        match (list_ops.0.len(), list_ops.0.pop()) {
-            (_, None) =>
-                unreachable!(),
-            (1, Some(Op::Const(Const::EncodedNumber(number)))) => {
+        match &list_ast.kind {
+            AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), } =>
+                Ok(list_ast),
+            AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } => {
                 let transformed = trans(number)?;
-                return Ok(Ops(vec![Op::Const(Const::EncodedNumber(transformed))]));
+                Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(transformed)), })))
             },
-            (_, Some(last_item)) =>
-                list_ops.0.push(last_item),
+            _ => {
+                let ast_node = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
+                let car_ast = self.eval_num_list_map(ast_node, trans, env, cache)?;
+                let ast_node = self.eval_ast_on(self.eval_cdr(), list_ast.clone(), env, cache)?;
+                let cdr_ast = self.eval_num_list_map(ast_node, trans, env, cache)?;
+                Ok(Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), })),
+                        arg: car_ast,
+                    })),
+                    arg: cdr_ast,
+                })))
+            },
         }
-
-        let mut trans_ops = Ops(vec![]);
-        loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
-            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
-                break;
-            }
-
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
-            let child_ops = self.eval_num_list_map(ops, trans, env, cache)?;
-            trans_ops.0.push(Op::App);
-            trans_ops.0.push(Op::App);
-            trans_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
-            trans_ops.0.extend(child_ops.0);
-
-            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
-            match (list_ops.0.len(), list_ops.0.first()) {
-                (_, None) =>
-                    unreachable!(),
-                (1, Some(Op::Const(Const::EncodedNumber(..)))) => {
-                    let number = if let Op::Const(Const::EncodedNumber(number)) = list_ops.0.swap_remove(0) {
-                        number
-                    } else {
-                        unreachable!();
-                    };
-                    let transformed = trans(number)?;
-                    trans_ops.0.push(Op::Const(Const::EncodedNumber(transformed)));
-                    return Ok(trans_ops);
-                },
-                (_, Some(Op::App)) |
-                (_, Some(Op::Const(Const::ModulatedBits(..)))) |
-                (_, Some(Op::Const(Const::Fun(Fun::Nil)))) =>
-                    (),
-                (_, Some(..)) => {
-                    return Err(Error::InvalidConsListItem { ops: list_ops, });
-                },
-            }
-        }
-        trans_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
-
-        Ok(trans_ops)
     }
 
-    fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env, cache: &mut Cache) -> Result<encoder::ListVal, Error> {
-        match (list_ops.0.len(), list_ops.0.pop()) {
-            (_, None) =>
-                unreachable!(),
-            (1, Some(Op::Const(Const::EncodedNumber(number @ EncodedNumber { modulation: Modulation::Modulated, .. })))) =>
-                return Ok(encoder::ListVal::Number(number)),
-            (1, Some(Op::Const(Const::EncodedNumber(number @ EncodedNumber { modulation: Modulation::Demodulated, .. })))) =>
-                return Err(Error::DemodulatedNumberInList { number, }),
-            (_, Some(last_item)) =>
-                list_ops.0.push(last_item),
+    fn eval_ast_to_list_val(&self, mut list_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<encoder::ListVal, Error> {
+        match &list_ast.kind {
+            AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } =>
+                return Ok(encoder::ListVal::Number(number.clone())),
+            _ =>
+                (),
         }
 
         let mut cons_stack = vec![];
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
-            if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
+            let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
+            if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
                 break;
             }
 
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
-            let child_list_val = self.eval_ops_to_list_val(ops, env, cache)?;
+            let ast_node = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
+            let child_list_val = self.eval_ast_to_list_val(ast_node, env, cache)?;
             cons_stack.push(child_list_val);
 
-            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
+            list_ast = self.eval_ast_on(self.eval_cdr(), list_ast, env, cache)?;
         }
 
         let mut cons_list = encoder::ConsList::Nil;
@@ -1882,13 +1806,21 @@ impl Interpreter {
         Ok(encoder::ListVal::Cons(Box::new(cons_list)))
     }
 
-    fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
-        let mut script = Ops(Vec::with_capacity(ops.len() + on_script.0.len()));
-        script.0.clear();
-        script.0.extend(ops.iter().cloned());
-        script.0.extend(on_script.0.iter().cloned());
-        let tree = self.build_tree(script)?;
-        self.eval_cache(tree, env, cache)
+    fn eval_ast_on(&self, fun: Rc<AstNodeH>, on_script: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        let app_ast = Rc::new(AstNodeH::new(AstNode::App { fun, arg: on_script, }));
+        self.eval_tree_ast(app_ast, env, cache)
+    }
+
+    fn eval_isnil(&self) -> Rc<AstNodeH> {
+        Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), }))
+    }
+
+    fn eval_car(&self) -> Rc<AstNodeH> {
+        Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), }))
+    }
+
+    fn eval_cdr(&self) -> Rc<AstNodeH> {
+        Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), }))
     }
 
     fn eval_interact(&self, protocol: Rc<AstNodeH>, state: Rc<AstNodeH>, vector: Rc<AstNodeH>, _env: &Env) -> Result<Rc<AstNodeH>, Error> {
@@ -2411,7 +2343,17 @@ impl Ast {
             Ast::Empty =>
                 Ops(vec![]),
             Ast::Tree(ast_node) =>
-                Rc::new(ast_node).render(),
+                ast_node.render(),
+        }
+    }
+
+    #[cfg(test)]
+    fn take_tree(self) -> Rc<AstNodeH> {
+        match self {
+            Ast::Empty =>
+                panic!("should not be here"),
+            Ast::Tree(ast_node) =>
+                ast_node,
         }
     }
 }

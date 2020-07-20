@@ -187,7 +187,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64, valid_state: &mut Galax
         Op::Const(Const::Fun(Fun::Interact)),
         Op::Const(Const::Fun(Fun::Galaxy)),
     ]);
-    nops.0.extend(state_list_ops.0.clone());
+    nops.0.extend(state_list_ops.0);
     nops.0.extend(vec![
         Op::App,
         Op::App,
@@ -212,7 +212,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64, valid_state: &mut Galax
 
     match session.eval_ops(nops.clone()) {
         Ok(ops) => {
-            valid_state.state = state_list_ops;
+            valid_state.state = state_ops;
             valid_state.last_click = (x, y);
             Some(ops)
         },

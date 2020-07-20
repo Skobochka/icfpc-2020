@@ -40,6 +40,11 @@ use common::{
         Session,
     },
     send::Intercom,
+    encoder::{
+        self,
+        Modulable,
+        PrettyPrintable,
+    },
     code::*,
 };
 
@@ -203,8 +208,14 @@ fn extract_state(session: &mut Session, ops: Ops) -> Option<Ops> {
     ]);
     state_ops.0.extend(ops.0);
     match session.eval_force_list(state_ops.clone()) {
-        Ok(ops) =>
-            Some(ops),
+        Ok(ops) => {
+            if let [Op::Const(Const::ModulatedBits(bits))] = &*ops.0 {
+                if let Ok(cons_list) = encoder::ConsList::demodulate_from_string(bits) {
+                    println!(" // using current state = {}", cons_list.to_pretty_string());
+                }
+            }
+            Some(ops)
+        },
         Err(e) => {
             println!("Error in extract_state: {:?}",e);
             println!("state_ops: {:?}", state_ops);

@@ -670,8 +670,13 @@ impl Interpreter {
                     },
 
                     // Car0 on another fun
-                    (State::EvalAppArgCar, EvalOp::Fun(fun)) =>
-                        return Err(Error::ApplyingCarToInvalidFun { fun: EvalOp::Fun(fun).render_ast().render(), }),
+                    (State::EvalAppArgCar, EvalOp::Fun(fun)) => {
+                        ast_node = Rc::new(AstNodeH::new(AstNode::App {
+                            fun: EvalOp::Fun(fun).render_ast(),
+                            arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
+                        }));
+                        break;
+                    },
 
                     // Car0 on an abstract
                     (State::EvalAppArgCar, EvalOp::Abs(arg_ast_node)) =>
@@ -716,8 +721,13 @@ impl Interpreter {
                     },
 
                     // Cdr0 on another fun
-                    (State::EvalAppArgCdr, EvalOp::Fun(fun)) =>
-                        return Err(Error::ApplyingCdrToInvalidFun { fun: EvalOp::Fun(fun).render_ast().render(), }),
+                    (State::EvalAppArgCdr, EvalOp::Fun(fun)) => {
+                        ast_node = Rc::new(AstNodeH::new(AstNode::App {
+                            fun: EvalOp::Fun(fun).render_ast(),
+                            arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), })),
+                        }));
+                        break;
+                    },
 
                     // Cdr0 on an abstract
                     (State::EvalAppArgCdr, EvalOp::Abs(arg_ast_node)) =>

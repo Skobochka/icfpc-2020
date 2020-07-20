@@ -88,6 +88,9 @@ pub struct DotsXYT {
     dots: Vec<Obstacle>,
 }
 impl DotsXYT {
+    pub fn clear(&mut self) {
+        self.dots.clear()
+    }
     pub fn new(data: &Data, sx: f64, sy: f64) -> DotsXYT {
         let mx = sx.abs()*2.0;
         let my = sy.abs()*2.0;
@@ -248,7 +251,7 @@ impl MapObject for Obstacle {
 impl DrawControl for Obstacle {
     fn draw<'t>(&mut self, c: &DrawContext, glc: &mut GlContext<'t>) {
         match self {
-            Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([1.0,1.0,0.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [1.0,1.0,0.0,1.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
+            Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([1.0,1.0,0.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [1.0,1.0,0.0,0.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
         }
     }
 }
@@ -262,6 +265,9 @@ impl Map {
         y = -y+1.0;
         cursor.cursor = [x.floor(),y.floor()];
         cursor
+    }
+    pub fn clear(&mut self) {
+        self.dots.clear()
     }
     pub fn next_data(&mut self, data: &Data) {
         self.dots.next(&data)

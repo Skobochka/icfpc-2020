@@ -329,10 +329,11 @@ fn main() {
                     }
 
                     let datas = Data::from_pics(pics);
+                    app.main.scene.map.clear();
                     // println!("got {} pictures",datas.len());
-                    for data in datas {
+                    for i in 0 .. datas.len() {
                         // println!("{:?}",data);
-                        app.main.scene.map.next_data(&data);
+                        app.main.scene.map.next_data(&datas[datas.len() -1 -i ]);
                     }
                 }
             },

@@ -1410,11 +1410,13 @@ impl Interpreter {
                     // },
 
                     // number type argument fun on a fun
-                    (State::EvalAppArgNum { fun }, EvalOp::Fun(arg_fun)) =>
+                    (State::EvalAppArgNum { fun }, EvalOp::Fun(arg_fun)) => {
+                        // println!(" // vm: root is {:?}", root.clone().render());
                         return Err(Error::AppExpectsNumButFunProvided {
                             fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render(),
                             arg: EvalOp::Fun(arg_fun).render(),
-                        }),
+                        });
+                    },
 
                     // fun on abs
                     (State::EvalAppArgNum { fun }, EvalOp::Abs(arg_ast_node)) =>

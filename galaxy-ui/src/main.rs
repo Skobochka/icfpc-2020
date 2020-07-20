@@ -113,7 +113,7 @@ fn asm(session: &mut Session, asm: &str) -> Option<Ops> {
     }
 }
 
-fn render(session: &mut Session, ops: &Ops) {
+fn render_first(session: &mut Session, ops: &Ops) -> Option<Ops> {
     //ap render ap car ap cdr
     let mut nops = vec![
         Op::App, Op::Const(Const::Fun(Fun::Render)),
@@ -122,9 +122,25 @@ fn render(session: &mut Session, ops: &Ops) {
     ];
     nops.extend(ops.0.iter().map(|o|o.clone()));
     match session.eval_ops(Ops(nops)) {
-        Ok(_) => {},
+        Ok(ops) => Some(ops),
         Err(e) => {
-            println!("Error in render: {:?}",e);
+            println!("Error in render_first: {:?}",e);
+            None
+        },
+    }
+}
+
+fn render_next(session: &mut Session, ops: &Ops) -> Option<Ops> {
+    //ap render 
+    let mut nops = vec![
+        Op::App, Op::Const(Const::Fun(Fun::Render)),
+    ];
+    nops.extend(ops.0.iter().map(|o|o.clone()));
+    match session.eval_ops(Ops(nops)) {
+        Ok(ops) => Some(ops),
+        Err(e) => {
+            println!("Error in render_next: {:?}",e);
+            None
         },
     }
 }
@@ -292,12 +308,13 @@ fn main() {
     let init_asm = "ap ap ap interact galaxy nil ap ap vec 0 0";
     //ap render ap car ap cdr
     let t = std::time::Instant::now();
+    let mut current_frame_seq = None;
     let mut current = asm(&mut session,init_asm);
     println!("First step:   {:?}",t.elapsed());
     if let Some(ops) = &current {
         let t = std::time::Instant::now();
-        render(&mut session,ops);
-        println!("     render: {:?}",t.elapsed());
+        current_frame_seq = render_first(&mut session,ops);
+        println!("     render_first: {:?}",t.elapsed());
     }
 
 
@@ -347,6 +364,9 @@ fn main() {
         last_click: (0, 0),
     };
 
+    
+    
+    
     while let Some(e) = events.next(&mut window) {
        //println!("[{:?}] {:.3} {:?}",start.elapsed(),app.rotation,e);
 
@@ -379,11 +399,16 @@ fn main() {
                     }
 
                     let datas = Data::from_pics(pics);
-                    app.main.scene.map.clear();
+                    //
                     // println!("got {} pictures",datas.len());
                     for i in 0 .. datas.len() {
                         // println!("{:?}",data);
                         app.main.scene.map.next_data(&datas[datas.len() -1 -i ]);
+                    }
+                    if let Some(ops) = &current_frame_seq {
+                        let t = std::time::Instant::now();
+                        current_frame_seq = render_next(&mut session,ops);
+                        println!("     render_next: {:?}",t.elapsed());
                     }
                 }
             },
@@ -448,9 +473,10 @@ fn main() {
                         //current = next(&mut session, ops,0,0);
                         println!("Next step ({:?}):   {:?}",coo,t.elapsed());
                         if let Some(ops) = &current {
+                            app.main.scene.map.clear();
                             let t = std::time::Instant::now();
-                            render(&mut session,ops);
-                            println!("     render: {:?}",t.elapsed());
+                            current_frame_seq = render_first(&mut session,ops);
+                            println!("     render_first: {:?}",t.elapsed());
                         }
                         println!("waiting for next 'q'...");
                     }
@@ -470,9 +496,10 @@ fn main() {
                             }
                             println!("Next step for ({}, {}):   {:?}", x, y, t.elapsed());
                             if let Some(ops) = &current {
+                                app.main.scene.map.clear();
                                 let t = std::time::Instant::now();
-                                render(&mut session,ops);
-                                println!("     render: {:?}",t.elapsed());
+                                current_frame_seq = render_first(&mut session,ops);
+                                println!("     render_first: {:?}",t.elapsed());
                             }
                             println!("waiting for results...");
                             match picture_rx.recv() {
@@ -516,9 +543,10 @@ fn main() {
                             );
                             println!("Load step:   {:?}",t.elapsed());
                             if let Some(ops) = &current {
+                                app.main.scene.map.clear();
                                 let t = std::time::Instant::now();
-                                render(&mut session,ops);
-                                println!("     render: {:?}",t.elapsed());
+                                current_frame_seq = render_first(&mut session,ops);
+                                println!("     render_first: {:?}",t.elapsed());
                             }
                         },
                         Err(error) =>

@@ -697,7 +697,7 @@ impl Interpreter {
                     (State::EvalAppArgCar, EvalOp::Mod { bits, }) => {
                         ast_node = Rc::new(AstNodeH::new(match encoder::ConsList::demodulate_from_string(&bits) {
                             Ok(encoder::ConsList::Nil) =>
-                                return Err(Error::ApplyingCarToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                                AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), },
                             Ok(encoder::ConsList::Cons(encoder::ListVal::Number(number), _)) =>
                                 AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
                             Ok(encoder::ConsList::Cons(encoder::ListVal::Cons(car), _)) =>
@@ -748,7 +748,7 @@ impl Interpreter {
                     (State::EvalAppArgCdr, EvalOp::Mod { bits, }) => {
                         ast_node = Rc::new(AstNodeH::new(match encoder::ConsList::demodulate_from_string(&bits) {
                             Ok(encoder::ConsList::Nil) =>
-                                return Err(Error::ApplyingCdrToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                                AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), },
                             Ok(encoder::ConsList::Cons(_, encoder::ListVal::Number(number))) =>
                                 AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
                             Ok(encoder::ConsList::Cons(_, encoder::ListVal::Cons(cdr))) =>

@@ -295,3 +295,26 @@ impl Intersection {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum NotCircle {
+    Point,
+}
+
+#[derive(Debug,Clone,Copy)]
+pub struct CircleExt {
+    pivot: [f64; 2],
+    radius: f64,
+}
+impl CircleExt {
+    pub fn new(pivot: [f64; 2], r: f64) -> Result<CircleExt,NotCircle> {
+        if r.abs() < EPS { return Err(NotCircle::Point); }
+        Ok(CircleExt{
+            pivot: pivot,
+            radius: r,
+        })
+    }
+    pub fn mbr(&self) -> [f64; 4] {
+        [self.pivot[0]-self.radius,self.pivot[1]-self.radius,self.radius*2.0,self.radius*2.0]
+    }
+}

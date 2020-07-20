@@ -427,6 +427,7 @@ fn main() {
                                 println!("     render_first: {:?}",t.elapsed());
                             }
                             println!("waiting for next click...");
+                            app.main.scene.map.cursor(coo);
                         }
                     }
                     cursor.state = CursorState::None;

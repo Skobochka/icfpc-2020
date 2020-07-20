@@ -64,6 +64,8 @@ pub struct Map {
     obstacles: Obstacles,
     dots: DotsXYT,
 
+    cursor: Option<Obstacle>,
+
     //path_tree: Vec<usize>,
     //dq: VecDeque<(f64,f64)>,
 
@@ -73,6 +75,7 @@ pub struct Map {
 
 #[derive(Clone,Debug,Copy)]
 enum Obstacle {
+    Circle(geom::CircleExt),
     RectInTime{ rect: geom::RectExt, tm: f64 },
     //Tri([f64;6])
 }
@@ -110,7 +113,7 @@ impl DotsXYT {
             sy: sy,
             mx: mx,
             my: my,
-            dtm: 0.25,
+            dtm: 0.1,
             dots: v,
         }
     }
@@ -118,14 +121,18 @@ impl DotsXYT {
         self.dots = self.dots.iter().filter_map(|obs| {
             let mut obs = obs.clone();
             let mut drop = false;
-            let Obstacle::RectInTime{ tm, .. } = &mut obs;
-            *tm -= self.dtm;
-            if *tm <= 0.0 {
-                drop = true;
-            }
-            match drop {
-                true => None,
-                false => Some(obs),
+            match &mut obs {
+                Obstacle::RectInTime{ tm, .. } => {
+                    *tm -= self.dtm;
+                    if *tm <= 0.0 {
+                        drop = true;
+                    }
+                    match drop {
+                        true => None,
+                        false => Some(obs),
+                    }
+                },
+                Obstacle::Circle(..) => None,
             }
         }).collect();
         for coo in &data.data {
@@ -237,6 +244,7 @@ impl RTreeObject for Obstacle {
     fn envelope(&self) -> Self::Envelope {
         let r = match self {
             Obstacle::RectInTime{ rect: o, .. } => o.mbr(),
+            Obstacle::Circle(o) => o.mbr(),
         };
         AABB::from_corners([r[0],r[1]],[r[0]+r[2],r[1]+r[3]])
     }
@@ -244,6 +252,7 @@ impl RTreeObject for Obstacle {
 impl MapObject for Obstacle {
     fn rect_intersect(&self, rect: [f64; 4]) -> bool {
         match self {
+            Obstacle::Circle(o) => math::overlap_rectangle(o.mbr(), rect).is_some(),
             Obstacle::RectInTime{ rect: o, .. } => math::overlap_rectangle(o.mbr(), rect).is_some(),
         }
     }
@@ -252,11 +261,15 @@ impl DrawControl for Obstacle {
     fn draw<'t>(&mut self, c: &DrawContext, glc: &mut GlContext<'t>) {
         match self {
             Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([1.0,1.0,0.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [1.0,1.0,0.0,0.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
+            Obstacle::Circle(cq) => Ellipse::new([1.0,0.0,0.0,0.5]).border(ellipse::Border{ color: [1.0,0.0,0.0,1.0], radius: 0.5 }).draw(cq.mbr(),&c.draw_state,c.transform,&mut glc.gl),
         }
     }
 }
 
 impl Map {
+    pub fn cursor(&mut self, coo: [f64; 2]) {
+        self.cursor = Some(Obstacle::Circle(geom::CircleExt::new([coo[0]+0.5,-coo[1]+0.5],5.0).unwrap()));
+    }
     pub fn get_cursor(&self, mut cursor: Cursor) -> Cursor {
         let x = cursor.cursor[0];
         let mut y = cursor.cursor[1];
@@ -302,6 +315,7 @@ impl Map {
             },
             lines: Vec::new(),//gen_n_lines(1000,&mut rng,&mut kdt,(-25.0,25.0),(-20.0,20.0),&obs,&mut dq, &mut path),
             obstacles: obs,
+            cursor: None,
             dots: dots,
             _rng: rng,
             lines2: Vec::new(),
@@ -354,6 +368,9 @@ impl DrawControl for Map {
             if obs.rect_intersect(map_rect) {
                 obs.draw(c,glc);
             }
+        }
+        if let Some(obs) = &mut self.cursor {
+            obs.draw(c,glc);
         }
 
         let line = Line::new([0.7,0.7,0.7,1.0],0.03);

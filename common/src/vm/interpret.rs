@@ -1647,7 +1647,13 @@ impl Interpreter {
                 },
             }
 
-            render_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &render_ops, env, cache)?;
+            let mut next_render_ops = Ops(vec![
+                Op::App,
+                Op::Const(Const::Fun(Fun::Cdr)),
+            ]);
+            next_render_ops.0.extend(render_ops.0);
+            render_ops = next_render_ops;
+            // render_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &render_ops, env, cache)?;
             break;
         }
 

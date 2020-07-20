@@ -66,7 +66,7 @@ pub enum Error {
     NoAppArgProvided { fun: Ops, },
     EvalEmptyTree,
     AppOnNumber { number: EncodedNumber, arg: Ops, },
-    AppExpectsNumButFunProvided { fun: Ops, },
+    AppExpectsNumButFunProvided { fun: Ops, arg: Ops, },
     TwoNumbersOpInDifferentModulation { number_a: EncodedNumber, number_b: EncodedNumber, },
     DivisionByZero,
     IsNilAppOnANumber { number: EncodedNumber, },
@@ -184,7 +184,7 @@ pub struct Cache {
 impl Cache {
     pub fn new() -> Cache {
         Cache {
-            memo: LruCache::new(65536),
+            memo: LruCache::new(128 * 1024),
         }
     }
 
@@ -1398,8 +1398,11 @@ impl Interpreter {
                         },
 
                     // number type argument fun on a fun
-                    (State::EvalAppArgNum { .. }, EvalOp::Fun(fun)) =>
-                        return Err(Error::AppExpectsNumButFunProvided { fun: EvalOp::Fun(fun).render(), }),
+                    (State::EvalAppArgNum { fun }, EvalOp::Fun(arg_fun)) =>
+                        return Err(Error::AppExpectsNumButFunProvided {
+                            fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render(),
+                            arg: EvalOp::Fun(arg_fun).render(),
+                        }),
 
                     // fun on abs
                     (State::EvalAppArgNum { fun }, EvalOp::Abs(arg_ast_node)) =>

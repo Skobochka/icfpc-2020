@@ -40,6 +40,11 @@ use common::{
         Session,
     },
     send::Intercom,
+    encoder::{
+        self,
+        Modulable,
+        PrettyPrintable,
+    },
     code::*,
 };
 
@@ -113,7 +118,7 @@ fn asm(session: &mut Session, asm: &str) -> Option<Ops> {
     }
 }
 
-fn render(session: &mut Session, ops: &Ops) {
+fn render_first(session: &mut Session, ops: &Ops) -> Option<Ops> {
     //ap render ap car ap cdr
     let mut nops = vec![
         Op::App, Op::Const(Const::Fun(Fun::Render)),
@@ -122,9 +127,43 @@ fn render(session: &mut Session, ops: &Ops) {
     ];
     nops.extend(ops.0.iter().map(|o|o.clone()));
     match session.eval_ops(Ops(nops)) {
-        Ok(_) => {},
+        Ok(ops) => {
+            match ops.0.len() {
+                0 => None,
+                1 => match &ops.0[0] {
+                    Op::Const(Const::Fun(Fun::Nil)) => None,
+                    _ => Some(ops),
+                },
+                _ => Some(ops),
+            }
+        },
         Err(e) => {
-            println!("Error in render: {:?}",e);
+            println!("Error in render_first: {:?}",e);
+            None
+        },
+    }
+}
+
+fn render_next(session: &mut Session, ops: &Ops) -> Option<Ops> {
+    //ap render
+    let mut nops = vec![
+        Op::App, Op::Const(Const::Fun(Fun::Render)),
+    ];
+    nops.extend(ops.0.iter().map(|o|o.clone()));
+    match session.eval_ops(Ops(nops)) {
+        Ok(ops) => {
+            match ops.0.len() {
+                0 => None,
+                1 => match &ops.0[0] {
+                    Op::Const(Const::Fun(Fun::Nil)) => None,
+                    _ => Some(ops),
+                },
+                _ => Some(ops),
+            }
+        },
+        Err(e) => {
+            println!("Error in render_next: {:?}",e);
+            None
         },
     }
 }
@@ -169,8 +208,14 @@ fn extract_state(session: &mut Session, ops: Ops) -> Option<Ops> {
     ]);
     state_ops.0.extend(ops.0);
     match session.eval_force_list(state_ops.clone()) {
-        Ok(ops) =>
-            Some(ops),
+        Ok(ops) => {
+            if let [Op::Const(Const::ModulatedBits(bits))] = &*ops.0 {
+                if let Ok(cons_list) = encoder::ConsList::demodulate_from_string(bits) {
+                    println!(" // using current state = {}", cons_list.to_pretty_string());
+                }
+            }
+            Some(ops)
+        },
         Err(e) => {
             println!("Error in extract_state: {:?}",e);
             println!("state_ops: {:?}", state_ops);
@@ -226,59 +271,6 @@ fn next(session: &mut Session, state_list_ops: Ops, x: i64, y: i64, valid_state:
     }
 }
 
-#[allow(dead_code)]
-fn ops2asm(ops: &Ops) -> String {
-    let mut s = String::new();
-    for op in ops.0.iter() {
-        match op {
-            Op::App => s += "ap",
-            Op::Const(Const::Picture(..)) => s += "[pic]",
-            Op::Const(Const::Fun(Fun::Cons)) => s += "cons",
-            Op::Const(Const::Fun(Fun::Inc)) => s += "inc",
-            Op::Const(Const::Fun(Fun::Dec)) => s += "dec",
-            Op::Const(Const::Fun(Fun::Sum)) => s += "add",
-            Op::Const(Const::Fun(Fun::Mul)) => s += "mul",
-            Op::Const(Const::Fun(Fun::Div)) => s += "div",
-            Op::Const(Const::Fun(Fun::Eq)) => s += "eq",
-            Op::Const(Const::Fun(Fun::Lt)) => s += "lt",
-            Op::Const(Const::Fun(Fun::Mod)) => s += "mod",
-            Op::Const(Const::Fun(Fun::Dem)) => s += "dem",
-            Op::Const(Const::Fun(Fun::Send)) => s += "send",
-            Op::Const(Const::Fun(Fun::Neg)) => s += "neg",
-            Op::Const(Const::Fun(Fun::S)) => s += "s",
-            Op::Const(Const::Fun(Fun::B)) => s += "b",
-            Op::Const(Const::Fun(Fun::C)) => s += "c",
-            Op::Const(Const::Fun(Fun::True)) => s += "t",
-            Op::Const(Const::Fun(Fun::False)) => s += "f",
-            Op::Const(Const::Fun(Fun::Pwr2)) => s += "pwr",
-            Op::Const(Const::Fun(Fun::I)) => s += "i",
-            Op::Const(Const::Fun(Fun::Car)) => s += "car",
-            Op::Const(Const::Fun(Fun::Cdr)) => s += "cdr",
-            Op::Const(Const::Fun(Fun::Nil)) => s += "nil",
-            Op::Const(Const::Fun(Fun::IsNil)) => s += "isnil",
-            Op::Const(Const::Fun(Fun::Vec)) => s += "vec",
-            Op::Const(Const::Fun(Fun::Draw)) => s += "draw",
-            Op::Const(Const::Fun(Fun::MultipleDraw)) => s += "multipledraw",
-            Op::Const(Const::Fun(Fun::If0)) => s += "if0",
-            Op::Const(Const::Fun(Fun::Interact)) => s += "interact",
-            Op::Const(Const::Fun(Fun::Modem)) => s += "modem",
-            Op::Const(Const::Fun(Fun::Galaxy)) => s += "galaxy",
-            Op::Const(Const::Fun(Fun::Chkb)) |
-            Op::Const(Const::Fun(Fun::Checkerboard)) => s += "checkerboard",
-            Op::Const(Const::Fun(Fun::F38)) => s += "f38",
-            Op::Const(Const::Fun(Fun::Render)) => s += "render",
-            Op::Const(Const::EncodedNumber(EncodedNumber { number: Number::Positive(PositiveNumber { value: v }), .. })) => s += &v.to_string(),
-            Op::Const(Const::EncodedNumber(EncodedNumber { number: Number::Negative(NegativeNumber { value: v }), .. })) => s += &v.to_string(),
-            Op::Variable(Variable{ name: Number::Positive(PositiveNumber { value: v }) }) => s += &format!(":{}",v.to_string()),
-            Op::Variable(Variable{ name: Number::Negative(NegativeNumber { value: v }) }) => s += &format!(":{}",v.to_string()),
-            Op::Syntax(Syntax::LeftParen) => s += "(",
-            Op::Syntax(Syntax::Comma) => s += ",",
-            Op::Syntax(Syntax::RightParen) => s += ")",
-        }
-    }
-    s
-}
-
 fn main() {
     let (picture_tx,picture_rx) = std::sync::mpsc::channel();
     let mut session = match session(picture_tx) {
@@ -292,12 +284,13 @@ fn main() {
     let init_asm = "ap ap ap interact galaxy nil ap ap vec 0 0";
     //ap render ap car ap cdr
     let t = std::time::Instant::now();
+    let mut current_frame_seq = None;
     let mut current = asm(&mut session,init_asm);
     println!("First step:   {:?}",t.elapsed());
     if let Some(ops) = &current {
         let t = std::time::Instant::now();
-        render(&mut session,ops);
-        println!("     render: {:?}",t.elapsed());
+        current_frame_seq = render_first(&mut session,ops);
+        println!("     render_first: {:?}",t.elapsed());
     }
 
 
@@ -347,6 +340,9 @@ fn main() {
         last_click: (0, 0),
     };
 
+
+
+
     while let Some(e) = events.next(&mut window) {
        //println!("[{:?}] {:.3} {:?}",start.elapsed(),app.rotation,e);
 
@@ -379,11 +375,16 @@ fn main() {
                     }
 
                     let datas = Data::from_pics(pics);
-                    app.main.scene.map.clear();
+                    //
                     // println!("got {} pictures",datas.len());
                     for i in 0 .. datas.len() {
                         // println!("{:?}",data);
                         app.main.scene.map.next_data(&datas[datas.len() -1 -i ]);
+                    }
+                    if let Some(ops) = &current_frame_seq {
+                        let t = std::time::Instant::now();
+                        current_frame_seq = render_next(&mut session,ops);
+                        println!("     render_next: {:?}",t.elapsed());
                     }
                 }
             },
@@ -403,27 +404,7 @@ fn main() {
                     };
                     app.cursor(cursor);
                     {
-                        // let coo = app.main.scene.get_cursor().cursor;
-                        //let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
-                        //let nasm = "ap render ap car ap cdr ap ap ap interact galaxy ap ap cons 0 ap ap cons ap ap cons 0 nil ap ap cons 0 ap ap cons nil nil ap ap vec 0 0";
-                        //asm(&mut session, nasm);
 
-
-                        /*if let Some(ops) = current.take() {
-                            let t = std::time::Instant::now();
-                            if let Some(state_list_ops) = extract_state(&mut session, ops) {
-                                current = next(&mut session, state_list_ops, coo[0] as i64, coo[1] as i64, &mut valid_state);
-                            }
-                            //current = next(&mut session, ops,0,0);
-                            println!("Next step:   {:?}",t.elapsed());
-                            if let Some(ops) = &current {
-                                let t = std::time::Instant::now();
-                                render(&mut session,ops);
-                                println!("     render: {:?}",t.elapsed());
-                            }
-                        }*/
-
-                        //println!("Click: {:?}",app.main.scene.get_cursor());
                     }
                     cursor.state = CursorState::None;
                 },
@@ -448,9 +429,10 @@ fn main() {
                         //current = next(&mut session, ops,0,0);
                         println!("Next step ({:?}):   {:?}",coo,t.elapsed());
                         if let Some(ops) = &current {
+                            app.main.scene.map.clear();
                             let t = std::time::Instant::now();
-                            render(&mut session,ops);
-                            println!("     render: {:?}",t.elapsed());
+                            current_frame_seq = render_first(&mut session,ops);
+                            println!("     render_first: {:?}",t.elapsed());
                         }
                         println!("waiting for next 'q'...");
                     }
@@ -470,9 +452,10 @@ fn main() {
                             }
                             println!("Next step for ({}, {}):   {:?}", x, y, t.elapsed());
                             if let Some(ops) = &current {
+                                app.main.scene.map.clear();
                                 let t = std::time::Instant::now();
-                                render(&mut session,ops);
-                                println!("     render: {:?}",t.elapsed());
+                                current_frame_seq = render_first(&mut session,ops);
+                                println!("     render_first: {:?}",t.elapsed());
                             }
                             println!("waiting for results...");
                             match picture_rx.recv() {
@@ -516,9 +499,10 @@ fn main() {
                             );
                             println!("Load step:   {:?}",t.elapsed());
                             if let Some(ops) = &current {
+                                app.main.scene.map.clear();
                                 let t = std::time::Instant::now();
-                                render(&mut session,ops);
-                                println!("     render: {:?}",t.elapsed());
+                                current_frame_seq = render_first(&mut session,ops);
+                                println!("     render_first: {:?}",t.elapsed());
                             }
                         },
                         Err(error) =>

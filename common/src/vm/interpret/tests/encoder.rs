@@ -25,11 +25,13 @@ fn encode() {
     let interpreter = Interpreter::new();
 
     assert_eq!(
-        interpreter.eval_ops_to_list_val(
-            Ops(vec![
-                Op::Syntax(Syntax::LeftParen),
-                Op::Syntax(Syntax::RightParen),
-            ]),
+        interpreter.eval_ast_to_list_val(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::Syntax(Syntax::LeftParen),
+                    Op::Syntax(Syntax::RightParen),
+                ]),
+            ).unwrap().take_tree(),
             &Env::new(),
             &mut Cache::new(),
         ).unwrap(),
@@ -37,17 +39,19 @@ fn encode() {
     );
 
     assert_eq!(
-        interpreter.eval_ops_to_list_val(
-            Ops(vec![
-                Op::Syntax(Syntax::LeftParen),
-                Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 0,
-                    }),
-                    modulation: Modulation::Modulated,
-                })),
-                Op::Syntax(Syntax::RightParen),
-            ]),
+        interpreter.eval_ast_to_list_val(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::Syntax(Syntax::LeftParen),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 0,
+                        }),
+                        modulation: Modulation::Modulated,
+                    })),
+                    Op::Syntax(Syntax::RightParen),
+                ]),
+            ).unwrap().take_tree(),
             &Env::new(),
             &mut Cache::new(),
         ).unwrap(),
@@ -61,24 +65,26 @@ fn encode() {
     );
 
     assert_eq!(
-        interpreter.eval_ops_to_list_val(
-            Ops(vec![
-                Op::Syntax(Syntax::LeftParen),
-                Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                    modulation: Modulation::Modulated,
-                })),
-                Op::Syntax(Syntax::Comma),
-                Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                    modulation: Modulation::Modulated,
-                })),
-                Op::Syntax(Syntax::RightParen),
-            ]),
+        interpreter.eval_ast_to_list_val(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::Syntax(Syntax::LeftParen),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Modulated,
+                    })),
+                    Op::Syntax(Syntax::Comma),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Modulated,
+                    })),
+                    Op::Syntax(Syntax::RightParen),
+                ]),
+            ).unwrap().take_tree(),
             &Env::new(),
             &mut Cache::new(),
         ).unwrap(),
@@ -98,26 +104,28 @@ fn encode() {
     );
 
     assert_eq!(
-        interpreter.eval_ops_to_list_val(
-            Ops(vec![
-                Op::Syntax(Syntax::LeftParen),
-                Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Positive(PositiveNumber {
-                        value: 1,
-                    }),
-                    modulation: Modulation::Modulated,
-                })),
-                Op::Syntax(Syntax::Comma),
-                Op::Syntax(Syntax::LeftParen),
-                Op::Const(Const::EncodedNumber(EncodedNumber {
-                    number: Number::Negative(NegativeNumber {
-                        value: -1,
-                    }),
-                    modulation: Modulation::Modulated,
-                })),
-                Op::Syntax(Syntax::RightParen),
-                Op::Syntax(Syntax::RightParen),
-            ]),
+        interpreter.eval_ast_to_list_val(
+            interpreter.build_tree(
+                Ops(vec![
+                    Op::Syntax(Syntax::LeftParen),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Positive(PositiveNumber {
+                            value: 1,
+                        }),
+                        modulation: Modulation::Modulated,
+                    })),
+                    Op::Syntax(Syntax::Comma),
+                    Op::Syntax(Syntax::LeftParen),
+                    Op::Const(Const::EncodedNumber(EncodedNumber {
+                        number: Number::Negative(NegativeNumber {
+                            value: -1,
+                        }),
+                        modulation: Modulation::Modulated,
+                    })),
+                    Op::Syntax(Syntax::RightParen),
+                    Op::Syntax(Syntax::RightParen),
+                ]),
+            ).unwrap().take_tree(),
             &Env::new(),
             &mut Cache::new(),
         ).unwrap(),
@@ -166,7 +174,13 @@ fn decode() {
         ))),
     )));
     assert_eq!(
-        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new(), &mut Cache::new()).unwrap(),
+        interpreter.eval_ast_to_list_val(
+            interpreter.build_tree(
+                list_val_to_ops(cons_list.clone()),
+            ).unwrap().take_tree(),
+            &Env::new(),
+            &mut Cache::new(),
+        ).unwrap(),
         cons_list,
     );
 
@@ -186,7 +200,13 @@ fn decode() {
             ListVal::Cons(Box::new(ConsList::Nil))))),
     )));
     assert_eq!(
-        interpreter.eval_ops_to_list_val(list_val_to_ops(cons_list.clone()), &Env::new(), &mut Cache::new()).unwrap(),
+        interpreter.eval_ast_to_list_val(
+            interpreter.build_tree(
+                list_val_to_ops(cons_list.clone()),
+            ).unwrap().take_tree(),
+            &Env::new(),
+            &mut Cache::new(),
+        ).unwrap(),
         cons_list,
     );
 }

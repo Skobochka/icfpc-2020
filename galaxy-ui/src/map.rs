@@ -1,32 +1,22 @@
 use graphics::*;
-use graphics::math::Matrix2d;
 
-use rand::{
-    Rng,
-    seq::SliceRandom,
-    distributions::Distribution,
-};
-
-use rstar::{RTree,RTreeObject,AABB,PointDistance};
+use rstar::{RTree,RTreeObject,AABB};
 
 use crate::{
     Data,
     GlContext,
-    geom::{self,LineExt,Intersection,Form},
+    geom::{self,Form},
     controls::{
         Cursor,Button as CursorButton,CursorState,CursorAction,
         DrawControl,DrawContext,
     },
-    kdtree::{KDTree,l2_norm2},
 };
 
-use std::collections::VecDeque;
+// const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+// const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+// const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 
-const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
-const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
-const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
-
-const P: f32 = 3.141592654;
+// const P: f32 = 3.141592654;
 
 
 #[derive(Debug,Clone,Copy)]
@@ -77,15 +67,12 @@ pub struct Map {
     //path_tree: Vec<usize>,
     //dq: VecDeque<(f64,f64)>,
 
-    rng: rand::prelude::ThreadRng,
+    _rng: rand::prelude::ThreadRng,
     //kdt: KDTree,
 }
 
 #[derive(Clone,Debug,Copy)]
 enum Obstacle {
-    Circle(geom::CircleExt),
-    Line(geom::LineExt),
-    Rect(geom::RectExt),
     RectInTime{ rect: geom::RectExt, tm: f64 },
     //Tri([f64;6])
 }
@@ -128,11 +115,10 @@ impl DotsXYT {
         self.dots = self.dots.iter().filter_map(|obs| {
             let mut obs = obs.clone();
             let mut drop = false;
-            if let Obstacle::RectInTime{ tm, .. } = &mut obs {
-                *tm -= self.dtm;
-                if *tm <= 0.0 {
-                    drop = true;
-                }
+            let Obstacle::RectInTime{ tm, .. } = &mut obs;
+            *tm -= self.dtm;
+            if *tm <= 0.0 {
+                drop = true;
             }
             match drop {
                 true => None,
@@ -198,7 +184,7 @@ impl Obstacles {
             tree: RTree::bulk_load(v),
         }
     }
-    pub fn vertical() -> Obstacles {     
+    pub fn vertical() -> Obstacles {
         Obstacles {
             random_part_tree: None,
             tree: RTree::bulk_load(vec![
@@ -212,7 +198,7 @@ impl Obstacles {
 
                 Obstacle::Line(LineExt::new([-15.0,-19.0,-15.0,21.0]).unwrap()),
                 Obstacle::Line(LineExt::new([-15.1,-19.0,-15.1,21.0]).unwrap()),
-                Obstacle::Line(LineExt::new([-15.0,-19.0,-15.1,-19.0]).unwrap()),             
+                Obstacle::Line(LineExt::new([-15.0,-19.0,-15.1,-19.0]).unwrap()),
 
                 Obstacle::Line(LineExt::new([-13.0,19.0,-13.0,-21.0]).unwrap()),
                 Obstacle::Line(LineExt::new([-13.1,19.0,-13.1,-21.0]).unwrap()),
@@ -240,46 +226,6 @@ impl Obstacles {
             ]),
         }
     }*/
-    pub fn contains_point(&self, p: [f64; 2]) -> bool {
-        for obs in self.tree.locate_in_envelope_intersecting(&AABB::from_point(p)) {
-            if match obs {
-                Obstacle::Line(o) => o.contains_point(p),
-                Obstacle::Rect(o) |
-                Obstacle::RectInTime{ rect: o, .. } => o.contains_point(p),
-                Obstacle::Circle(o) => o.contains_point(p),
-            } { return true; }
-        }
-        false
-    }
-    pub fn intersect(&self, p1: [f64; 2], p2: [f64; 2]) -> bool {
-        enum Tmp {
-            Line(LineExt),
-            Point([f64; 2]),
-        }
-
-        let t = match LineExt::from_to(p1,p2) {
-            Ok(ln) => Tmp::Line(ln),
-            Err(_) => Tmp::Point(p1),
-        };
-        for obs in self.tree.locate_in_envelope_intersecting(&AABB::from_corners(p1,p2)) {
-            if match obs {
-                Obstacle::Line(ln) => match t {
-                    Tmp::Line(tmp) => ln.is_intersecting_segment(&tmp),
-                    Tmp::Point(p) => ln.contains_point(p),
-                },
-                Obstacle::RectInTime{ rect: r, .. } |
-                Obstacle::Rect(r) => match t {
-                    Tmp::Line(tmp) => r.is_intersecting_segment(&tmp),
-                    Tmp::Point(p) => r.contains_point(p),
-                },
-                Obstacle::Circle(c) => match t {
-                    Tmp::Line(tmp) => c.is_intersecting_segment(&tmp),
-                    Tmp::Point(p) => c.contains_point(p),
-                },
-            } { return true; }
-        }
-        false
-    }
 }
 
 impl RTreeObject for Obstacle {
@@ -287,10 +233,7 @@ impl RTreeObject for Obstacle {
 
     fn envelope(&self) -> Self::Envelope {
         let r = match self {
-            Obstacle::Line(o) => o.mbr(),
-            Obstacle::Circle(o) => o.mbr(),
-            Obstacle::RectInTime{ rect: o, .. } |
-            Obstacle::Rect(o) => o.mbr(),
+            Obstacle::RectInTime{ rect: o, .. } => o.mbr(),
         };
         AABB::from_corners([r[0],r[1]],[r[0]+r[2],r[1]+r[3]])
     }
@@ -298,27 +241,21 @@ impl RTreeObject for Obstacle {
 impl MapObject for Obstacle {
     fn rect_intersect(&self, rect: [f64; 4]) -> bool {
         match self {
-            Obstacle::Line(o) => math::overlap_rectangle(o.mbr(), rect).is_some(),
-            Obstacle::Circle(o) => math::overlap_rectangle(o.mbr(), rect).is_some(),
-            Obstacle::RectInTime{ rect: o, .. } |
-            Obstacle::Rect(o) => math::overlap_rectangle(o.mbr(), rect).is_some(),
+            Obstacle::RectInTime{ rect: o, .. } => math::overlap_rectangle(o.mbr(), rect).is_some(),
         }
     }
 }
 impl DrawControl for Obstacle {
     fn draw<'t>(&mut self, c: &DrawContext, glc: &mut GlContext<'t>) {
         match self {
-            Obstacle::Line(ln) => Line::new([0.0,0.0,1.0,1.0],0.03).draw_from_to(ln.from(),ln.to(),&c.draw_state,c.transform,&mut glc.gl),
-            Obstacle::Rect(r) => Rectangle::new([0.0,0.0,1.0,0.7]).border(rectangle::Border{ color: [0.0,0.0,1.0,1.0], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
             Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([0.0,0.0,1.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [0.0,0.0,1.0,1.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
-            Obstacle::Circle(cq) => Ellipse::new([0.0,0.0,1.0,0.7]).border(ellipse::Border{ color: [0.0,0.0,1.0,1.0], radius: 0.03 }).draw(cq.mbr(),&c.draw_state,c.transform,&mut glc.gl),
         }
     }
 }
 
 impl Map {
     pub fn get_cursor(&self, mut cursor: Cursor) -> Cursor {
-        let mut x = cursor.cursor[0];
+        let x = cursor.cursor[0];
         let mut y = cursor.cursor[1];
         //x -= self.size.size_x.0;
         //y = self.size.size_y.1 - y;
@@ -332,23 +269,23 @@ impl Map {
     pub fn new(data: &Data) -> Map {
         let mut dx = data.width();
         let mut dy = data.height();
-        
+
         if dx < 80.0 { dx = 80.0; }
         if dy < 60.0 { dy = 60.0; }
 
         let size_x = ( -dx/2.0, dx/2.0);
         let size_y = ( -dy/2.0, dy/2.0);
-        
-        let mut rng = rand::thread_rng();
+
+        let rng = rand::thread_rng();
         //let start = [-24.0,19.0];
         //let target = [24.0,-19.0];
-        let mut t = std::time::Instant::now();
+        // let mut t = std::time::Instant::now();
         let obs = Obstacles::empty();
 
         let dots = DotsXYT::new(data,size_x.0,size_y.0);
-        
-        
-        let mut map = Map {
+
+
+        let map = Map {
             size: MapSize {
                 size_x: size_x,
                 size_y: size_y,
@@ -360,9 +297,9 @@ impl Map {
             lines: Vec::new(),//gen_n_lines(1000,&mut rng,&mut kdt,(-25.0,25.0),(-20.0,20.0),&obs,&mut dq, &mut path),
             obstacles: obs,
             dots: dots,
-            rng: rng,
+            _rng: rng,
             lines2: Vec::new(),
-            
+
         };
         map
     }
@@ -389,10 +326,10 @@ impl Map {
     }
 }
 impl Map {
-    pub fn select(&mut self, rect: [f64; 4]) {
-        
+    pub fn select(&mut self, _rect: [f64; 4]) {
+
     }
-    pub fn act(&mut self, rect: [f64; 4]) {
+    pub fn act(&mut self, _rect: [f64; 4]) {
 
     }
 }
@@ -412,7 +349,7 @@ impl DrawControl for Map {
                 obs.draw(c,glc);
             }
         }
-        
+
         let line = Line::new([0.7,0.7,0.7,1.0],0.03);
         for (p1,p2) in &self.lines2 {
             let r = [f64::min(p1[0],p2[0]),f64::min(p1[1],p2[1]),(p1[0]-p2[0]).abs(),(p1[1]-p2[1]).abs()];
@@ -426,9 +363,9 @@ impl DrawControl for Map {
             if math::overlap_rectangle(r, map_rect).is_some() {
                 line.draw_from_to(*p1,*p2,&c.draw_state,c.transform,&mut glc.gl);
             }
-        } 
+        }
     }
-    
+
 }
 
 pub trait MapObject {

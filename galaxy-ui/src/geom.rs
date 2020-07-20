@@ -22,10 +22,6 @@ fn v3_vec_mul(v: [f64; 3], q: [f64; 3]) -> [f64; 3] {
       v[0]*q[1] - q[0]*v[1]]
 }
 
-fn l2_norm2(p: [f64;2], q: [f64; 2]) -> f64 {
-    (p[0]-q[0]).powi(2) + (p[1]-q[1]).powi(2)
-}
-
 fn same_point(p: [f64;2], q: [f64; 2]) -> bool {
     ((p[0]-q[0]).abs() < EPS)&&((p[1]-q[1]).abs() < EPS)
 }
@@ -58,7 +54,7 @@ impl LineExt {
             seq: [ dx/d, dy/d, -dx*ps[0]/d -dy*ps[1]/d ],
             d: d,
         })
-            
+
     }
     pub fn f_xy(&self, p: [f64; 2]) -> f64 {
         self.eq[0] * p[0] + self.eq[1] * p[1] + self.eq[2]
@@ -67,22 +63,13 @@ impl LineExt {
         self.seq[0] * p[0] + self.seq[1] * p[1] + self.seq[2]
     }
     pub fn projection_in_segment(&self, p: [f64; 2]) -> bool {
-        (self.s_xy(p)/self.d - 0.5).abs() < (0.5 + EPS) 
+        (self.s_xy(p)/self.d - 0.5).abs() < (0.5 + EPS)
     }
     pub fn from(&self) -> [f64; 2] {
         [self.ps[0],self.ps[1]]
     }
     pub fn to(&self) -> [f64; 2] {
         [self.ps[2],self.ps[3]]
-    }
-    pub fn normal(&self) -> [f64; 2] {
-        [self.eq[0],self.eq[1]]
-    }
-    pub fn vec(&self) -> [f64; 2] {
-        [self.seq[0],self.seq[1]]
-    }
-    pub fn len(&self) -> f64 {
-        self.d
     }
 }
 
@@ -110,11 +97,11 @@ impl Form for LineExt {
     }
     fn surrounding(&self, mut dr: f64, _cnt: usize) -> Vec<[f64; 2]> {
         if dr < EPS {
-            dr = self.d * 0.05;            
-        } 
+            dr = self.d * 0.05;
+        }
         dr = dr / self.d / SQRT2;
         if dr < EPS { dr = EPS * 10.0; }
-        
+
         let dv = [self.seq[0]*dr,self.seq[1]*dr];
         let dn = [self.eq[0]*dr,self.eq[1]*dr];
         vec![
@@ -168,8 +155,8 @@ impl Form for RectExt {
     }
     fn surrounding(&self, mut dr: f64, _cnt: usize) -> Vec<[f64; 2]> {
         let d = f64::max(self.rect[2],self.rect[3]);
-        if dr < EPS { 
-            dr = d * 0.05;         
+        if dr < EPS {
+            dr = d * 0.05;
         }
         dr = dr / d / SQRT2;
         if dr < EPS { dr = EPS * 10.0; }
@@ -261,81 +248,6 @@ impl Form for RectExt {
     }
 }
 
-#[derive(Debug)]
-pub enum NotCircle {
-    Point,
-}
-
-#[derive(Debug,Clone,Copy)]
-pub struct CircleExt {
-    pivot: [f64; 2],
-    radius: f64,
-}
-impl CircleExt {
-    pub fn new(pivot: [f64; 2], r: f64) -> Result<CircleExt,NotCircle> {
-        if r.abs() < EPS { return Err(NotCircle::Point); }
-        Ok(CircleExt{
-            pivot: pivot,
-            radius: r,
-        })
-    }
-}
-impl Form for CircleExt {
-    fn mbr(&self) -> [f64; 4] {
-        [self.pivot[0]-self.radius,self.pivot[1]-self.radius,self.radius*2.0,self.radius*2.0]
-    }
-    fn contains_point(&self, p: [f64; 2]) -> bool {
-        l2_norm2(self.pivot,p) < (self.radius.powi(2) + EPS)
-    }
-    fn surrounding(&self, mut dr: f64, _cnt: usize) -> Vec<[f64; 2]> {
-        if dr < EPS { 
-            dr = self.radius * (SQRT2 + 0.02);         
-        }
-        if dr < EPS { dr = EPS * 10.0; }
-        let dr2 = dr / SQRT2;
-        vec![
-            [self.pivot[0]+dr,self.pivot[1]],
-            [self.pivot[0]-dr,self.pivot[1]],
-            [self.pivot[0],self.pivot[1]+dr],
-            [self.pivot[0],self.pivot[1]+dr],
-            [self.pivot[0]+dr2,self.pivot[1]+dr2],
-            [self.pivot[0]-dr2,self.pivot[1]+dr2],
-            [self.pivot[0]+dr2,self.pivot[1]-dr2],
-            [self.pivot[0]-dr2,self.pivot[1]-dr2],
-        ]
-    }
-    fn is_intersecting_segment(&self, line: &LineExt) -> bool {
-        match (self.contains_point(line.from()),self.contains_point(line.to())) {
-            (false,false) => match Intersection::seg_cir(line,self.pivot,self.radius) {
-                Intersection::None => false,
-                Intersection::Point(_) |
-                Intersection::Segment(_) => true,
-            },
-            _ => true,
-        }
-    }
-    fn intersect_segment(&self, line: &LineExt) -> Intersection {
-        match (self.contains_point(line.from()),self.contains_point(line.to())) {
-            (true,true) => Intersection::Segment(line.ps),
-            (true,_) => {
-                let q = line.from();
-                match Intersection::seg_cir(line,self.pivot,self.radius) {
-                    Intersection::Point(p) => Intersection::Segment([q[0],q[1],p[0],p[1]]),
-                    Intersection::None | Intersection::Segment(_) => unreachable!(),
-                }
-            },
-            (_,true) => {
-                let q = line.to();
-                match Intersection::seg_cir(line,self.pivot,self.radius) {
-                    Intersection::Point(p) => Intersection::Segment([q[0],q[1],p[0],p[1]]),
-                    Intersection::None | Intersection::Segment(_) => unreachable!(),
-                }
-            },
-            (false,false) => Intersection::seg_cir(line,self.pivot,self.radius),
-        }
-    }
-}
-
 #[derive(Debug,Clone,Copy)]
 pub enum Intersection {
     None,
@@ -380,31 +292,6 @@ impl Intersection {
                     }
                 },
             },
-        }
-    }
-    pub fn seg_cir(l: &LineExt, p: [f64;2], r: f64) -> Intersection {
-        if r < 0.0 { return Intersection::None; }
-        let d = l.f_xy(p).abs();
-        if d > r { return Intersection::None; }
-        
-        let s = l.s_xy(p);
-        let c = [ l.ps[0] + s*l.seq[0] , l.ps[1] + s*l.seq[1] ];
-        
-        if (d-r).abs() < EPS {
-            return match l.projection_in_segment(c) {
-                true => Intersection::Point(c),
-                false => Intersection::None,
-            };
-        }
-
-        let dc = (r*r - d*d).powf(0.5);
-        let c1 = [c[0]-dc*l.seq[0],c[1]-dc*l.seq[1]];
-        let c2 = [c[0]+dc*l.seq[0],c[1]+dc*l.seq[1]];
-        match (l.projection_in_segment(c1),l.projection_in_segment(c2)) {
-            (true,true) => Intersection::Segment([c1[0],c1[1],c2[0],c2[1]]),
-            (true,false) => Intersection::Point(c1),
-            (false,true) => Intersection::Point(c2),
-            (false,false) => Intersection::None,
         }
     }
 }

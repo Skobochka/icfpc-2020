@@ -99,7 +99,7 @@ impl DrawContext {
 
 pub trait DrawControl {
     fn draw<'t>(&mut self, c: &DrawContext, glc: &mut GlContext<'t>);
-    
+
     fn cursor(&mut self, _cursor: Cursor) -> CursorAction { CursorAction::None }
 }
 
@@ -179,9 +179,6 @@ impl TextData {
         self.pos = pos;
         self
     }
-    pub fn set_pos(&mut self, pos: [f64; 2]) {
-        self.pos = pos;
-    }
     pub fn set_text(&mut self, text: String) {
         self.text = text;
     }
@@ -204,7 +201,7 @@ impl DrawControl for Control {
             Control::Panel{ panel, children } => {
                 panel.draw(screen,glyphs,c,gl);
                 let mut c = *c;
-                c.transform = c.transform.trans(panel.left,panel.top);               
+                c.transform = c.transform.trans(panel.left,panel.top);
                 children.draw(screen,glyphs,&c,gl);
             },
             Control::Scene(scene) => scene.draw(screen,glyphs,c,gl),

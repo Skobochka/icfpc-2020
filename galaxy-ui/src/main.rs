@@ -3,7 +3,7 @@ use glutin_window::{
 };
 use opengl_graphics::{GlGraphics, OpenGL, GlyphCache, TextureSettings};
 use piston::event_loop::{EventSettings, Events, EventLoop};
-use piston::input::{RenderArgs, UpdateArgs};
+use piston::input::{RenderArgs};
 use piston::window::{
     WindowSettings,Window as WindowTrait,
 };
@@ -18,7 +18,6 @@ use piston::{
 use tokio::{self,runtime::Runtime};
 use futures::{
     channel::{
-        oneshot,
         mpsc::unbounded,
     },
     StreamExt,
@@ -40,7 +39,6 @@ use common::{
 
 const GRAY: [f32; 4] = [0.2, 0.2, 0.2, 1.0];
 
-mod kdtree;
 mod map;
 mod controls;
 mod main_screen;
@@ -64,48 +62,29 @@ impl Data {
     pub fn height(&self) -> f64 { 60.0 }
 }
 
-fn tmp_data(dx: f64, dy: f64) -> Data {
-     Data {
-        data: {
-            let mut v = Vec::new();
-            let szx = 20;
-            let szy = 10;
-            for x in 0 .. szx {
-                for y in 0 .. szy {
-                    if (x==0)||(x==szx-1)||(y==0)||(y==szy-1)||((x%szy) == (szy-y-1)) {
-                        v.push([x as f64 + dx, y as f64 + dy]);
-                    }
-                }
-            }
-            v
-        },
-    }
-}
-
 impl Data {
     fn from_pics(pics: Vec<Picture>) -> Vec<Data> {
         let mut dts = Vec::new();
         for p in pics {
-            if let Picture{ points } = p {
-                let mut v = Vec::new();
-                for p in points {
-                    let (x,y) = match p {
-                        Coord { x: EncodedNumber { number: x, .. }, y: EncodedNumber { number: y, .. } } => {
-                            (match x {
-                                Number::Positive(PositiveNumber{ value }) => value as f64,
-                                Number::Negative(NegativeNumber{ value }) => value as f64,
-                            },match y {
-                                Number::Positive(PositiveNumber{ value }) => value as f64,
-                                Number::Negative(NegativeNumber{ value }) => value as f64,
-                            })
-                        },
-                    };
-                    v.push([x as f64, y as f64]);
-                }
-                if v.len() > 0 {
-                    println!("data: {}",v.len());
-                    dts.push(Data{ data: v });
-                }
+            let Picture{ points } = p;
+            let mut v = Vec::new();
+            for p in points {
+                let (x,y) = match p {
+                    Coord { x: EncodedNumber { number: x, .. }, y: EncodedNumber { number: y, .. } } => {
+                        (match x {
+                            Number::Positive(PositiveNumber{ value }) => value as f64,
+                            Number::Negative(NegativeNumber{ value }) => value as f64,
+                        },match y {
+                            Number::Positive(PositiveNumber{ value }) => value as f64,
+                            Number::Negative(NegativeNumber{ value }) => value as f64,
+                        })
+                    },
+                };
+                v.push([x as f64, y as f64]);
+            }
+            if v.len() > 0 {
+                println!("data: {}",v.len());
+                dts.push(Data{ data: v });
             }
         }
         dts
@@ -168,6 +147,9 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
             modulation: Modulation::Demodulated,
         })),
     ].into_iter());
+
+    println!("evaluating: {:?}", nops);
+
     match session.eval_ops(Ops(nops)) {
         Ok(ops) => { Some(ops) },
         Err(e) => {
@@ -177,6 +159,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
     }
 }
 
+#[allow(dead_code)]
 fn ops2asm(ops: &Ops) -> String {
     let mut s = String::new();
     for op in ops.0.iter() {
@@ -290,7 +273,6 @@ fn main() {
     };
     app.cursor(cursor);
 
-    let mut t = std::time::Instant::now();
     while let Some(e) = events.next(&mut window) {
        //println!("[{:?}] {:.3} {:?}",start.elapsed(),app.rotation,e);
 
@@ -330,7 +312,7 @@ fn main() {
                     };
                     app.cursor(cursor);
                     {
-                        let coo = app.main.scene.get_cursor().cursor;
+                        let _coo = app.main.scene.get_cursor().cursor;
                         //let asm = format!("ap draw ( ap ap vec {} {} )",coo[0],coo[1]);
                         //let nasm = "ap render ap car ap cdr ap ap ap interact galaxy ap ap cons 0 ap ap cons ap ap cons 0 nil ap ap cons 0 ap ap cons nil nil ap ap vec 0 0";
                         //asm(&mut session, nasm);
@@ -382,7 +364,6 @@ pub struct Scene {
     width: f64,
     height: f64,
 
-    ratio: (f64,f64),
     transform: [[f64; 3]; 2],
     back_transform: [[f64; 3]; 2],
 
@@ -390,43 +371,23 @@ pub struct Scene {
     cursor: Cursor,
 
     map: Map,
-
-    chess: Vec<[f64; 4]>,
 }
 impl Scene {
     fn new(data: &Data, l: f64, t: f64, w: f64, h: f64, c: &DrawContext) -> Scene {
         let screen_w = c.screen_size.0;
         let screen_h = c.screen_size.1;
         let rm = f64::min(w,h);
-        let ratio = (w/rm, h/rm);
         let sc = 30.0; //8.0;
         let transform = math::translate([(2.0*l+w)/screen_w-1.0,1.0-(2.0*t+h)/screen_h]).scale(rm/screen_w/sc,rm/screen_h/sc);
         let back = math::multiply(DrawContext::reverse(transform),c.transform);
         let mut scene = Scene {
             left: l, top: t, width: w, height: h,
-            ratio: ratio,
             transform: transform,
             back_transform: back,
             scale: sc,
             cursor: Cursor::new(0.0,0.0),
 
             map: Map::new(data),
-
-            chess: {
-                let r = 72.0;
-                let ratio = (ratio.0 * r, ratio.1 * r);
-                let mut v = Vec::new();
-                let dx = 1.0 / ratio.0;
-                let dy = 1.0 / ratio.1;
-                for i in 0 .. (ratio.0.round() as usize) {
-                    for j in 0 .. (ratio.1.round() as usize) {
-                        if (i+j)%2 == 1 {
-                            v.push(rectangle::rectangle_by_corners(i as f64*dx,j as f64*dy,(i+1) as f64*dx,(j+1) as f64*dy));
-                        }
-                    }
-                }
-                v
-            },
         };
         scene.scale_map(0.0);
         if scene.scale == sc { scene.move_map([0.0;2]); }
@@ -499,7 +460,7 @@ impl DrawControl for Scene {
 
         //self.back_transform = math::multiply(DrawContext::reverse(self.transform),c.transform);
 
-        let tr = math::multiply(DrawContext::reverse(c.transform),self.transform);
+        // let tr = math::multiply(DrawContext::reverse(c.transform),self.transform);
 
         // Draws chess background
         /*let t = c.transform.trans(self.left,self.top).scale(self.width,self.height);
@@ -650,10 +611,6 @@ impl<'t> App<'t> {
         window.swap_buffers();
     }
 
-    fn update(&mut self, _args: &UpdateArgs) {
-
-    }
-
     fn cursor(&mut self, cursor: Cursor) {
         self.cursor = cursor;
         self.main.cursor(self.cursor);
@@ -663,7 +620,7 @@ impl<'t> App<'t> {
 fn session(sender: std::sync::mpsc::Sender<Vec<Picture>>) -> Result<Session,common::proto::Error> {
     let (outer_tx, mut outer_rx) = unbounded();
 
-    let mut session = Session::with_interpreter(
+    let session = Session::with_interpreter(
         galaxy(),
         Interpreter::with_outer_channel(outer_tx),
     )?;

@@ -339,7 +339,7 @@ fn main() {
     app.cursor(cursor);
 
     let mut prev_pixels = vec![];
-    let mut pictures_incoming = None;
+    let mut pictures_incoming: Option<Vec<Picture>> = None;
     let mut valid_state = GalaxyState {
         state: Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
         last_click: (0, 0),
@@ -362,7 +362,6 @@ fn main() {
                 app.cursor(cursor);
                 cursor.scroll = [0.0; 2];
 
-                let mut pictures_incoming: Option<Vec<Picture>> = None;
                 while let Ok(pics) = picture_rx.try_recv() {
                     match &mut pictures_incoming {
                         Some(ps) => ps.extend(pics.into_iter()),

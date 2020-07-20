@@ -1717,49 +1717,93 @@ impl Interpreter {
         Ok(ast_node)
     }
 
-    fn eval_num_list_map<F>(&self, list_ast: Rc<AstNodeH>, trans: &F, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error>
+    fn eval_num_list_map<F>(&self, mut list_ast: Rc<AstNodeH>, trans: &F, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error>
     where F: Fn(&EncodedNumber) -> Result<EncodedNumber, Error>
     {
-        match &list_ast.kind {
-            AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } => {
-                let transformed = trans(number)?;
-                Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(transformed)), })))
-            },
-            _ => {
-                let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
-                if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
-                    return Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), })));
+        enum Frame {
+            EvalCar { cdr_ast_node: Rc<AstNodeH>, },
+            EvalCdr { car_ast_node: Rc<AstNodeH>, },
+        }
+
+        let mut stack = vec![];
+        loop {
+            let mut ast_node = match &list_ast.kind {
+                AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } => {
+                    let transformed = trans(number)?;
+                    Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(transformed)), }))
+                },
+                _ => {
+                    let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
+                    if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
+                        Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), }))
+                    } else {
+                        let cdr_ast_node = self.eval_ast_on(self.eval_cdr(), list_ast.clone(), env, cache)?;
+                        stack.push(Frame::EvalCar { cdr_ast_node, });
+                        list_ast = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
+                        continue;
+                    }
+                },
+            };
+
+            loop {
+                match stack.pop() {
+                    None =>
+                        return Ok(ast_node),
+                    Some(Frame::EvalCar { cdr_ast_node, }) => {
+                        stack.push(Frame::EvalCdr { car_ast_node: ast_node, });
+                        list_ast = cdr_ast_node;
+                        break;
+                    },
+                    Some(Frame::EvalCdr { car_ast_node, }) =>
+                        ast_node = Rc::new(AstNodeH::new(AstNode::App {
+                            fun: Rc::new(AstNodeH::new(AstNode::App {
+                                fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), })),
+                                arg: car_ast_node,
+                            })),
+                            arg: ast_node,
+                        })),
                 }
-                let ast_node = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
-                let car_ast = self.eval_num_list_map(ast_node, trans, env, cache)?;
-                let ast_node = self.eval_ast_on(self.eval_cdr(), list_ast.clone(), env, cache)?;
-                let cdr_ast = self.eval_num_list_map(ast_node, trans, env, cache)?;
-                Ok(Rc::new(AstNodeH::new(AstNode::App {
-                    fun: Rc::new(AstNodeH::new(AstNode::App {
-                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), })),
-                        arg: car_ast,
-                    })),
-                    arg: cdr_ast,
-                })))
-            },
+            }
         }
     }
 
-    fn eval_ast_to_list_val(&self, list_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<encoder::ListVal, Error> {
-        match &list_ast.kind {
-            AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } =>
-                Ok(encoder::ListVal::Number(number.clone())),
-            _ => {
-                let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
-                if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
-                    return Ok(encoder::ListVal::Cons(Box::new(encoder::ConsList::Nil)));
+    fn eval_ast_to_list_val(&self, mut list_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<encoder::ListVal, Error> {
+        enum Frame {
+            EvalCar { cdr_ast_node: Rc<AstNodeH>, },
+            EvalCdr { car_list_val: encoder::ListVal, },
+        }
+
+        let mut stack = vec![];
+        loop {
+            let mut list_val = match &list_ast.kind {
+                AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } =>
+                    encoder::ListVal::Number(number.clone()),
+                _ => {
+                    let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
+                    if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
+                        encoder::ListVal::Cons(Box::new(encoder::ConsList::Nil))
+                    } else {
+                        let cdr_ast_node = self.eval_ast_on(self.eval_cdr(), list_ast.clone(), env, cache)?;
+                        stack.push(Frame::EvalCar { cdr_ast_node, });
+                        list_ast = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
+                        continue;
+                    }
+                },
+            };
+
+            loop {
+                match stack.pop() {
+                    None =>
+                        return Ok(list_val),
+                    Some(Frame::EvalCar { cdr_ast_node, }) => {
+                        stack.push(Frame::EvalCdr { car_list_val: list_val, });
+                        list_ast = cdr_ast_node;
+                        break;
+                    },
+                    Some(Frame::EvalCdr { car_list_val, }) =>
+                        list_val = encoder::ListVal::Cons(Box::new(encoder::ConsList::Cons(car_list_val, list_val))),
                 }
-                let ast_node = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
-                let car_list_val = self.eval_ast_to_list_val(ast_node, env, cache)?;
-                let ast_node = self.eval_ast_on(self.eval_cdr(), list_ast.clone(), env, cache)?;
-                let cdr_list_val = self.eval_ast_to_list_val(ast_node, env, cache)?;
-                Ok(encoder::ListVal::Cons(Box::new(encoder::ConsList::Cons(car_list_val, cdr_list_val))))
-            },
+            }
         }
     }
 

@@ -86,7 +86,7 @@ pub enum Error {
     DemodulatedNumberInList { number: EncodedNumber, },
     RenderItemIsNotAPicture { ops: Ops, },
     InvalidConsListItem { ops: Ops, },
-    ApplyingModulatedBitsOn { arg: Ops, },
+    ApplyingModulatedBitsOn { bits: String, arg: Ops, },
     ApplyingFunOnModulatedBits { fun: Ops, },
     ApplyingCarToLiteral { value: Op, },
     ApplyingCarToInvalidFun { fun: Ops, },
@@ -870,8 +870,31 @@ impl Interpreter {
                         },
 
                     // modulated bits on something
-                    (State::EvalAppFun { arg, }, EvalOp::Mod { .. }) =>
-                        return Err(Error::ApplyingModulatedBitsOn { arg: arg.render(), }),
+                    (State::EvalAppFun { arg, }, EvalOp::Mod { bits }) =>
+                        match encoder::ConsList::demodulate_from_string(&bits) {
+                            Ok(encoder::ConsList::Nil) =>
+                                eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)),
+                            Ok(encoder::ConsList::Cons(car, cdr)) => {
+                                fn to_op(val: encoder::ListVal) -> Op {
+                                    match val {
+                                        encoder::ListVal::Number(number) =>
+                                            Op::Const(Const::EncodedNumber(number)),
+                                        encoder::ListVal::Cons(cell) =>
+                                            Op::Const(Const::ModulatedBits(cell.modulate_to_string())),
+                                    }
+                                }
+                                ast_node = Rc::new(AstNodeH::new(AstNode::App {
+                                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                                        fun: arg,
+                                        arg: Rc::new(AstNodeH::new(AstNode::Literal { value: to_op(car), })),
+                                    })),
+                                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: to_op(cdr), })),
+                                }));
+                                break;
+                            },
+                            Err(error) =>
+                                return Err(Error::ConsListDem(error)),
+                        },
 
                     // if0 on a number
                     (State::EvalAppArgNum { fun: EvalFunNum::IfZero0, }, EvalOp::Num { number, }) =>

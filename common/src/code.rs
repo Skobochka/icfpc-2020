@@ -36,6 +36,7 @@ pub enum Const {
     EncodedNumber(EncodedNumber),
     Fun(Fun), // predefined functions from spec
     Picture(Picture), // an image drawing script
+    ModulatedBits(String), // some modulated bits that are not decoded yet
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]

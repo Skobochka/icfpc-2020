@@ -86,6 +86,10 @@ pub enum Error {
     DemodulatedNumberInList { number: EncodedNumber, },
     RenderItemIsNotAPicture { ops: Ops, },
     InvalidConsListItem { ops: Ops, },
+    ApplyingModulatedBitsOn { arg: Ops, },
+    ApplyingFunOnModulatedBits { fun: Ops, },
+    ApplyingCarToLiteral { value: Op, },
+    ApplyingCdrToLiteral { value: Op, },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -579,9 +583,25 @@ impl Interpreter {
 
                     // Car0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Car0))) => {
-                        ast_node = Rc::new(AstNodeH::new(AstNode::App {
-                            fun: arg,
-                            arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
+                        ast_node = Rc::new(AstNodeH::new(match &arg.kind {
+                            AstNode::Literal { value: Op::Const(Const::ModulatedBits(bits)), } =>
+                                match encoder::ConsList::demodulate_from_string(bits) {
+                                    Ok(encoder::ConsList::Nil) =>
+                                        return Err(Error::ApplyingCarToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                                    Ok(encoder::ConsList::Cons(encoder::ListVal::Number(number), _)) =>
+                                        AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
+                                    Ok(encoder::ConsList::Cons(encoder::ListVal::Cons(car), _)) =>
+                                        AstNode::Literal { value: Op::Const(Const::ModulatedBits(car.modulate_to_string())), },
+                                    Err(error) =>
+                                        return Err(Error::ConsListDem(error)),
+                                },
+                            AstNode::App { .. } =>
+                                AstNode::App {
+                                    fun: arg,
+                                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
+                                },
+                            AstNode::Literal { value, } =>
+                                return Err(Error::ApplyingCarToLiteral { value: value.clone(), }),
                         }));
                         cache.memo(root, ast_node.clone());
                         break;
@@ -589,9 +609,25 @@ impl Interpreter {
 
                     // Cdr0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0))) => {
-                        ast_node = Rc::new(AstNodeH::new(AstNode::App {
-                            fun: arg,
-                            arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), })),
+                        ast_node = Rc::new(AstNodeH::new(match &arg.kind {
+                            AstNode::Literal { value: Op::Const(Const::ModulatedBits(bits)), } =>
+                                match encoder::ConsList::demodulate_from_string(bits) {
+                                    Ok(encoder::ConsList::Nil) =>
+                                        return Err(Error::ApplyingCdrToLiteral { value: Op::Const(Const::Fun(Fun::Nil)), }),
+                                    Ok(encoder::ConsList::Cons(_, encoder::ListVal::Number(number))) =>
+                                        AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), },
+                                    Ok(encoder::ConsList::Cons(_, encoder::ListVal::Cons(cdr))) =>
+                                        AstNode::Literal { value: Op::Const(Const::ModulatedBits(cdr.modulate_to_string())), },
+                                    Err(error) =>
+                                        return Err(Error::ConsListDem(error)),
+                                },
+                            AstNode::App { .. } =>
+                                AstNode::App {
+                                    fun: arg,
+                                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), })),
+                                },
+                            AstNode::Literal { value, } =>
+                                return Err(Error::ApplyingCdrToLiteral { value: value.clone(), }),
                         }));
                         cache.memo(root, ast_node.clone());
                         break;
@@ -643,6 +679,22 @@ impl Interpreter {
                                     arg: arg_ast_node,
                                 }))),
                         },
+
+                    // IsNil on an modulated bits
+                    (State::EvalAppArgIsNil, EvalOp::Mod { bits, }) => {
+                        ast_node = Rc::new(AstNodeH::new(AstNode::Literal {
+                            value: Op::Const(Const::Fun(
+                                match encoder::ConsList::demodulate_from_string(&bits) {
+                                    Ok(encoder::ConsList::Nil) =>
+                                        Fun::True,
+                                    _ =>
+                                        Fun::False,
+                                }
+                            )),
+                        }));
+                        cache.memo(root, ast_node.clone());
+                        break;
+                    },
 
                     // IfZero1 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, }))) =>
@@ -758,6 +810,10 @@ impl Interpreter {
                                     arg: arg_ast_node,
                                 }))),
                         },
+
+                    // unresolved fun on something
+                    (State::EvalAppFun { arg, }, EvalOp::Mod { .. }) =>
+                        return Err(Error::ApplyingModulatedBitsOn { arg: arg.render(), }),
 
                     // if0 on a number
                     (State::EvalAppArgNum { fun: EvalFunNum::IfZero0, }, EvalOp::Num { number, }) =>
@@ -1466,6 +1522,11 @@ impl Interpreter {
                                 eval_op = EvalOp::Abs(Rc::new(ast_node));
                             },
                         },
+
+                    // fun on mod
+                    (State::EvalAppArgNum { fun }, EvalOp::Mod { .. }) =>
+                        return Err(Error::ApplyingFunOnModulatedBits { fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render(), }),
+
                 }
 
                 let maybe_cache = match &eval_op {
@@ -1473,7 +1534,7 @@ impl Interpreter {
                         Some(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(number.clone())), }))),
                     EvalOp::Abs(ref ast_node) =>
                         Some(ast_node.clone()),
-                    EvalOp::Fun(..) =>
+                    EvalOp::Fun(..) | EvalOp::Mod { .. } =>
                         None,
                 };
                 if let Some(value) = maybe_cache {
@@ -1603,16 +1664,7 @@ impl Interpreter {
             return Err(Error::SendOpIsNotSupportedWithoutOuterChannel);
         };
 
-        let recv_cons_list = encoder::ConsList::demodulate_from_string(&recv_mod)
-            .map_err(Error::ConsListDem)?;
-        let recv_ops = list_val_to_ops(encoder::ListVal::Cons(Box::new(recv_cons_list)));
-
-        match self.build_tree(recv_ops)? {
-            Ast::Empty =>
-                unreachable!(), // list_val_to_ops should return at least nil
-            Ast::Tree(ast_node) =>
-                Ok(Rc::new(ast_node)),
-        }
+        Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::ModulatedBits(recv_mod)), })))
     }
 
     fn eval_render(&self, render_args: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
@@ -1901,6 +1953,7 @@ impl Interpreter {
     }
 }
 
+#[cfg(test)]
 fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
     let mut ops = Ops(vec![]);
     loop {
@@ -1932,6 +1985,7 @@ fn list_val_to_ops(mut value: encoder::ListVal) -> Ops {
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum EvalOp {
     Num { number: EncodedNumber, },
+    Mod { bits: String, },
     Fun(EvalFun),
     Abs(Rc<AstNodeH>),
 }
@@ -2008,6 +2062,8 @@ impl EvalOp {
         match op {
             Op::Const(Const::EncodedNumber(number)) =>
                 EvalOp::Num { number, },
+            Op::Const(Const::ModulatedBits(bits)) =>
+                EvalOp::Mod { bits, },
             Op::Const(Const::Fun(Fun::Inc)) =>
                 EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Inc0)),
             Op::Const(Const::Fun(Fun::Dec)) =>
@@ -2091,6 +2147,8 @@ impl EvalOp {
         match self {
             EvalOp::Num { number, } =>
                 Ops(vec![Op::Const(Const::EncodedNumber(number))]),
+            EvalOp::Mod { bits, } =>
+                Ops(vec![Op::Const(Const::ModulatedBits(bits))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Inc0)) =>
                 Ops(vec![Op::Const(Const::Fun(Fun::Inc))]),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dec0)) =>

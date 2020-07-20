@@ -63,4 +63,9 @@ impl Session {
 
         Ok(result_ops)
     }
+
+    pub fn eval_force_list(&mut self, list_ops: Ops) -> Result<Ops,Error> {
+        self.inter.eval_force_list(list_ops, &self.env, &mut self.cache)
+            .map_err(Error::Vm)
+    }
 }

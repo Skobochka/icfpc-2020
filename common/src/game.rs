@@ -53,6 +53,7 @@ pub enum Command {
     Accelerate { vec: Vec2 }, // (0, shipId, vector)
     Detonate, // (1, shipId)
     Shoot { target: Vec2, x3_raw: String }, // (2, shipId, target, x3)
+    UnknownCommand { cmd_id: isize, raw: String },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -133,7 +134,7 @@ impl GameRound {
                 Ok(Command::Shoot { target: Vec2 { x: vec_enc.0.as_isize(), y: vec_enc.1.as_isize() },
                                     x3_raw })
             },
-            _ => unreachable!(),
+            _ => Ok(Command::UnknownCommand { cmd_id, raw: resp.to_pretty_string() }),
         }
     }
 

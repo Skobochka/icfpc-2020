@@ -1397,17 +1397,17 @@ impl Interpreter {
                             },
                         },
 
-                    // number type argument fun on a fun (special hack for `eq1` on fun)
-                    (State::EvalAppArgNum { fun: EvalFunNum::Eq0, }, EvalOp::Fun(fun)) => {
-                        println!(" // vm: hacking eq0 on {:?}", fun);
-                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0));
-                    },
+                    // // number type argument fun on a fun (special hack for `eq1` on fun)
+                    // (State::EvalAppArgNum { fun: EvalFunNum::Eq0, }, EvalOp::Fun(fun)) => {
+                    //     println!(" // vm: hacking eq0 on {:?}", fun);
+                    //     eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0));
+                    // },
 
-                    // number type argument fun on a fun (special hack for `eq1` on fun)
-                    (State::EvalAppArgNum { fun: EvalFunNum::Eq1 { .. }, }, EvalOp::Fun(fun)) => {
-                        println!(" // vm: hacking eq1 on {:?}", fun);
-                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0));
-                    },
+                    // // number type argument fun on a fun (special hack for `eq1` on fun)
+                    // (State::EvalAppArgNum { fun: EvalFunNum::Eq1 { .. }, }, EvalOp::Fun(fun)) => {
+                    //     println!(" // vm: hacking eq1 on {:?}", fun);
+                    //     eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0));
+                    // },
 
                     // number type argument fun on a fun
                     (State::EvalAppArgNum { fun }, EvalOp::Fun(arg_fun)) =>

@@ -1,8 +1,9 @@
 use std::env;
-use tokio::runtime::Runtime;
 
 use common::game::{
+    GameStage,
     GameRound,
+    GameRequest,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -16,19 +17,17 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut game = GameRound::new(&format!("{}/aliens/send", server_url), player_key);
 
 
-    println!("[DEBUG] JOIN");
-    let join_request = game.make_join_request();
-    game.run_request(join_request);
-
-    println!("[DEBUG] START");
-    let start_request = game.make_start_request(0, 0, 0, 1);
-    game.run_request(start_request);
+    game.run_request(GameRequest::JOIN)?;
+    let mut full_state = game.run_request(GameRequest::START { x0: 0, x1: 0, x2: 0, x3: 1 })?;
 
     for turn in 0..255 {
-        println!("[DEBUG] COMMAND {}", turn);
-        
-        let commands_request = game.make_commands_request(vec![]);
-        game.run_request(commands_request);
+        println!("[DEBUG] TURN {}", turn);
+        if full_state.stage == GameStage::Finished {
+            println!("[DEBUG] Game finished stage detected");
+            break;
+        }
+
+        full_state = game.run_request(GameRequest::COMMANDS(vec![]))?
     }
 
     Ok(())

@@ -166,7 +166,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64) -> Option<Ops> {
         })),
     ]);
 
-    println!("evaluating: {:?}", nops);
+    // println!("evaluating: {:?}", nops);
 
     match session.eval_ops(nops) {
         Ok(ops) => { Some(ops) },
@@ -326,7 +326,7 @@ fn main() {
                     }
 
                     let datas = Data::from_pics(pics);
-                    println!("got {} pictures",datas.len());
+                    // println!("got {} pictures",datas.len());
                     for data in datas {
                         println!("{:?}",data);
                         app.main.scene.map.next_data(&data);

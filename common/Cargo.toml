@@ -5,6 +5,7 @@ authors = ["skobochka"]
 edition = "2018"
 
 [dependencies]
+lru = "^0.5"
 pest = "^2.1"
 pest_derive = "^2.1"
 futures = "^0.3"

@@ -35,6 +35,7 @@ enum Error {
     QuitTxTerminated,
 }
 
+#[allow(dead_code)]
 fn ops2asm(ops: &Ops) -> String {
     let mut s = String::new();
     for op in ops.0.iter() {
@@ -174,8 +175,8 @@ async fn main() -> Result<(), Error> {
             }
             match session.eval_asm(&asm) {
                 Ok(ops) => {
-                    println!("Ok:");                          
-                    println!("   {}",ops2asm(&ops));
+                    println!("Ok:");
+                    println!("   {:?}", ops);
                     println!("");
                 },
                 Err(e) => {

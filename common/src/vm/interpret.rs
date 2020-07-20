@@ -8,6 +8,8 @@ use futures::{
     channel::mpsc::UnboundedSender,
 };
 
+use lru::LruCache;
+
 use super::{
     super::encoder::{
         self,
@@ -139,17 +141,17 @@ impl Env {
 
 #[derive(Debug)]
 pub struct Cache {
-    memo: HashMap<Rc<AstNode>, Rc<AstNode>>,
+    memo: LruCache<Rc<AstNode>, Rc<AstNode>>,
 }
 
 impl Cache {
     pub fn new() -> Cache {
         Cache {
-            memo: HashMap::new(),
+            memo: LruCache::new(65536),
         }
     }
 
-    pub fn get(&self, key: &Rc<AstNode>) -> Option<Rc<AstNode>> {
+    pub fn get(&mut self, key: &Rc<AstNode>) -> Option<Rc<AstNode>> {
         if let Some(ast_node) = self.memo.get(key) {
             Some(ast_node.clone())
         } else {
@@ -158,7 +160,11 @@ impl Cache {
     }
 
     pub fn memo(&mut self, key: Rc<AstNode>, value: Rc<AstNode>) {
-        self.memo.insert(key, value);
+        self.memo.put(key, value);
+    }
+
+    pub fn clear(&mut self) {
+        self.memo.clear();
     }
 }
 

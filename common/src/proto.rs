@@ -68,4 +68,8 @@ impl Session {
         self.inter.eval_force_list(list_ops, &self.env, &mut self.cache)
             .map_err(Error::Vm)
     }
+
+    pub fn clear_cache(&mut self) {
+        self.cache.clear();
+    }
 }

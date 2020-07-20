@@ -291,6 +291,9 @@ fn main() {
     };
     app.cursor(cursor);
 
+    let mut prev_pixels = vec![];
+    let mut pictures_incoming = None;
+
     while let Some(e) = events.next(&mut window) {
        //println!("[{:?}] {:.3} {:?}",start.elapsed(),app.rotation,e);
 
@@ -306,10 +309,26 @@ fn main() {
                 cursor.scroll = [0.0; 2];
 
                 if let Ok(pics) = picture_rx.try_recv() {
+                    pictures_incoming = Some(pics);
+                }
+                if let Some(pics) = pictures_incoming.take() {
+                    prev_pixels.clear();
+                    for Picture { points, } in &pics {
+                        for Coord { x: EncodedNumber { number: x, .. }, y: EncodedNumber { number: y, .. } } in points {
+                            prev_pixels.push((match x {
+                                Number::Positive(PositiveNumber{ value }) => *value as i64,
+                                Number::Negative(NegativeNumber{ value }) => *value as i64,
+                            },match y {
+                                Number::Positive(PositiveNumber{ value }) => *value as i64,
+                                Number::Negative(NegativeNumber{ value }) => *value as i64,
+                            }));
+                        }
+                    }
+
                     let datas = Data::from_pics(pics);
                     println!("got {} pictures",datas.len());
                     for data in datas {
-                        //println!("{:?}",data);
+                        println!("{:?}",data);
                         app.main.scene.map.next_data(&data);
                     }
                 }
@@ -362,6 +381,42 @@ fn main() {
                 Button::Keyboard(Key::LCtrl) => { cursor.scroll_to_scale = true; },
                 Button::Mouse(MouseButton::Left) => { cursor.state = CursorState::Drag{ from: cursor.cursor, tm: std::time::Instant::now(), button: CursorButton::Left}; },
                 Button::Mouse(MouseButton::Right) => { cursor.state = CursorState::Drag{ from: cursor.cursor, tm: std::time::Instant::now(), button: CursorButton::Right}; },
+
+                Button::Keyboard(Key::P) => {
+                    let mut maybe_prev_pics = None;
+                    while let Some((x, y)) = prev_pixels.pop() {
+                        if let Some(ops) = current.take() {
+                            let t = std::time::Instant::now();
+                            current = next(&mut session, ops, x, y);
+                            println!("Next step for ({}, {}):   {:?}", x, y, t.elapsed());
+                            if let Some(ops) = &current {
+                                let t = std::time::Instant::now();
+                                render(&mut session,ops);
+                                println!("     render: {:?}",t.elapsed());
+                            }
+                            println!("waiting for results...");
+                            match picture_rx.recv() {
+                                Ok(pics) =>
+                                    if let Some(prev_pics) = maybe_prev_pics.take() {
+                                        if pics == prev_pics {
+                                            maybe_prev_pics = Some(prev_pics);
+                                        } else {
+                                            println!("a new image received!");
+                                            pictures_incoming = Some(pics);
+                                            break;
+                                        }
+                                    } else {
+                                        maybe_prev_pics = Some(pics);
+                                    },
+                                Err(..) => {
+                                    println!("receive channel is broken");
+                                    break;
+                                },
+                            }
+                        }
+                    }
+                },
+
                 _ => {},
             },
             Event::Input(Input::Move(Motion::MouseCursor(cur)),_) => { cursor.cursor = cur; },

@@ -4,6 +4,9 @@ use common::game::{
     GameStage,
     GameRound,
     GameRequest,
+    Ship,
+    Command,
+    Vec2,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -19,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     game.run_request(GameRequest::JOIN)?;
     let mut full_state = game.run_request(GameRequest::START { x0: 0, x1: 0, x2: 0, x3: 1 })?;
+    let our_side = full_state.static_info.unwrap().role;
 
     for turn in 0..255 {
         println!("[DEBUG] TURN {}", turn);
@@ -27,7 +31,23 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             break;
         }
 
-        full_state = game.run_request(GameRequest::COMMANDS(vec![]))?
+        let mut cmds : Vec::<(Ship, Command)> = vec![];
+
+        for (ship, _) in full_state.state.unwrap().ships_n_commands {
+            if ship.role != our_side {
+                // Ignore enemy ships for now
+            }
+
+            let factor = 3; // acceleration factor
+            let cmd = Command::Accelerate{ vec: Vec2 {
+                x: ship.position.x * factor,
+                y: ship.position.x * factor, }
+            };
+
+            cmds.push((ship, cmd));
+        }
+
+        full_state = game.run_request(GameRequest::COMMANDS(cmds))?
     }
 
     Ok(())

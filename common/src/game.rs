@@ -192,7 +192,7 @@ impl GameRound {
 
                             ListVal::Cons(Box::new(ConsList::Nil)))))))))
             },
-            GameRequest::COMMANDS(_cmd_vec) => {
+            GameRequest::COMMANDS(cmd_vec) => {
                 println!("[DEBUG] COMMANDS");
 
                 // COMMANDS
@@ -209,12 +209,31 @@ impl GameRound {
 
                         ListVal::Cons(Box::new(ConsList::Cons(
 
-                            ListVal::Cons(Box::new(ConsList::Nil)), // here comes command list
-
+                            {
+                                let mut ret = ListVal::Cons(Box::new(ConsList::Nil));
+                                for (ship, cmd) in cmd_vec {
+                                    ret = ListVal::Cons(Box::new(ConsList::Cons(ListVal::Cons(Box::new(GameRound::make_ship_command(ship, cmd))), ret)));
+                                }
+                                ret
+                            },
                             ListVal::Cons(Box::new(ConsList::Nil)))))))))
 
             }
         }.modulate_to_string()
+    }
+
+    pub fn make_ship_command(ship: Ship, command: Command) -> ConsList {
+        match command {
+            Command::Accelerate { vec: Vec2 { x, y} }
+                => ConsList::Cons(
+                    ListVal::Number(make_mod_number(0)),
+                    ListVal::Cons(Box::new(ConsList::Cons(
+                        ListVal::Number(make_mod_number(ship.ship_id)),
+                        ListVal::Cons(Box::new(ConsList::Cons(
+                            ListVal::Number(make_mod_number(x)),
+                            ListVal::Number(make_mod_number(y))))))))),
+            _ => unimplemented!(),
+        }
     }
 
     pub fn parse_ship(resp: &ConsList) -> Result<Ship, Error> {
@@ -385,5 +404,12 @@ mod tests {
         assert_eq!(round.serialize_request(GameRequest::JOIN), "11011000101101100001110000");
         assert_eq!(round.serialize_request(GameRequest::START { x0: 0, x1: 0, x2: 0, x3: 0}), "1101100011110110000111110101101011010110100000");
         assert_eq!(round.serialize_request(GameRequest::COMMANDS(vec![])), "11011001001101100001110000");
+    }
+
+    #[test]
+    fn help_swizard() {
+        let v = "11011000111101111111111111111100111101100110111010011110100110001101010000010100011000010101011110000";
+        assert_eq!(GameRound::format_modulated(v), "(3 8878652379999383723 nil)");
+
     }
 }

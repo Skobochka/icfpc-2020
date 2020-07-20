@@ -231,7 +231,6 @@ impl Interpreter {
     }
 
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
-        // println!("Interpreter::build_tree() on {} ops", ops.len());
 
         enum State {
             AwaitAppFun,
@@ -384,7 +383,6 @@ impl Interpreter {
         enum State {
             EvalAppFun { arg: Rc<AstNodeH>, },
             EvalAppArgNum { fun: EvalFunNum, },
-            EvalAppArgIsNil,
             EvalAppArgCar,
             EvalAppArgCdr,
         }
@@ -604,58 +602,15 @@ impl Interpreter {
 
                     // IsNil0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0))) => {
-                        states.push(StackFrame { root, state: State::EvalAppArgIsNil, });
-                        ast_node = arg;
-                        break;
-                    },
-
-                    // IsNil on a number
-                    (State::EvalAppArgIsNil, EvalOp::Num { .. }) => {
-                        ast_node = Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), }));
-                        cache.memo(root, ast_node.clone());
-                        break;
-                    },
-
-                    // IsNil on a Nil0
-                    (State::EvalAppArgIsNil, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0))) => {
-                        ast_node = Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }));
-                        cache.memo(root, ast_node.clone());
-                        break;
-                    },
-
-                    // IsNil on another fun
-                    (State::EvalAppArgIsNil, EvalOp::Fun(..)) => {
-                        ast_node = Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), }));
-                        cache.memo(root, ast_node.clone());
-                        break;
-                    },
-
-                    // IsNil on an abstract
-                    (State::EvalAppArgIsNil, EvalOp::Abs(arg_ast_node)) =>
-                        match env.lookup_ast(&arg_ast_node) {
-                            Some(subst_ast_node) => {
-                                states.push(StackFrame { root, state: State::EvalAppArgIsNil, });
-                                ast_node = subst_ast_node.clone();
-                                break;
-                            },
-                            None =>
-                                eval_op = EvalOp::Abs(Rc::new(AstNodeH::new(AstNode::App {
-                                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), })),
-                                    arg: arg_ast_node,
-                                }))),
-                        },
-
-                    // IsNil on an modulated bits
-                    (State::EvalAppArgIsNil, EvalOp::Mod { bits, }) => {
-                        ast_node = Rc::new(AstNodeH::new(AstNode::Literal {
-                            value: Op::Const(Const::Fun(
-                                match encoder::ConsList::demodulate_from_string(&bits) {
-                                    Ok(encoder::ConsList::Nil) =>
-                                        Fun::True,
-                                    _ =>
-                                        Fun::False,
-                                }
-                            )),
+                        ast_node = Rc::new(AstNodeH::new(AstNode::App {
+                            fun: arg,
+                            arg: Rc::new(AstNodeH::new(AstNode::App {
+                                fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
+                                arg: Rc::new(AstNodeH::new(AstNode::App {
+                                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
+                                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), })),
+                                })),
+                            })),
                         }));
                         cache.memo(root, ast_node.clone());
                         break;
@@ -1756,26 +1711,25 @@ impl Interpreter {
         }, env, cache)
     }
 
-    fn eval_modem(&self, ast_node: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
-        let ast_node = self.eval_mod(ast_node, env, cache)?;
-        let ast_node = self.eval_dem(ast_node, env, cache)?;
+    fn eval_modem(&self, ast_node: Rc<AstNodeH>, _env: &Env, _cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
+        // let ast_node = self.eval_mod(ast_node, env, cache)?;
+        // let ast_node = self.eval_dem(ast_node, env, cache)?;
         Ok(ast_node)
     }
 
     fn eval_num_list_map<F>(&self, list_ast: Rc<AstNodeH>, trans: &F, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error>
     where F: Fn(&EncodedNumber) -> Result<EncodedNumber, Error>
     {
-        let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
-        if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
-            return Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), })));
-        }
-
         match &list_ast.kind {
             AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } => {
                 let transformed = trans(number)?;
                 Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(transformed)), })))
             },
             _ => {
+                let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
+                if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
+                    return Ok(Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), })));
+                }
                 let ast_node = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
                 let car_ast = self.eval_num_list_map(ast_node, trans, env, cache)?;
                 let ast_node = self.eval_ast_on(self.eval_cdr(), list_ast.clone(), env, cache)?;
@@ -1791,36 +1745,22 @@ impl Interpreter {
         }
     }
 
-    fn eval_ast_to_list_val(&self, mut list_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<encoder::ListVal, Error> {
+    fn eval_ast_to_list_val(&self, list_ast: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<encoder::ListVal, Error> {
         match &list_ast.kind {
             AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), } =>
-                return Ok(encoder::ListVal::Number(number.clone())),
-            _ =>
-                (),
+                Ok(encoder::ListVal::Number(number.clone())),
+            _ => {
+                let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
+                if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
+                    return Ok(encoder::ListVal::Cons(Box::new(encoder::ConsList::Nil)));
+                }
+                let ast_node = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
+                let car_list_val = self.eval_ast_to_list_val(ast_node, env, cache)?;
+                let ast_node = self.eval_ast_on(self.eval_cdr(), list_ast.clone(), env, cache)?;
+                let cdr_list_val = self.eval_ast_to_list_val(ast_node, env, cache)?;
+                Ok(encoder::ListVal::Cons(Box::new(encoder::ConsList::Cons(car_list_val, cdr_list_val))))
+            },
         }
-
-        let mut cons_stack = vec![];
-        loop {
-            let ast_node = self.eval_ast_on(self.eval_isnil(), list_ast.clone(), env, cache)?;
-            if let AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), } = &ast_node.kind {
-                break;
-            }
-
-            let ast_node = self.eval_ast_on(self.eval_car(), list_ast.clone(), env, cache)?;
-            let child_list_val = self.eval_ast_to_list_val(ast_node, env, cache)?;
-            cons_stack.push(child_list_val);
-
-            list_ast = self.eval_ast_on(self.eval_cdr(), list_ast, env, cache)?;
-        }
-
-        let mut cons_list = encoder::ConsList::Nil;
-        while let Some(item) = cons_stack.pop() {
-            cons_list = encoder::ConsList::Cons(
-                item,
-                encoder::ListVal::Cons(Box::new(cons_list)),
-            );
-        }
-        Ok(encoder::ListVal::Cons(Box::new(cons_list)))
     }
 
     fn eval_ast_on(&self, fun: Rc<AstNodeH>, on_script: Rc<AstNodeH>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {

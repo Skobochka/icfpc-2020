@@ -1397,6 +1397,12 @@ impl Interpreter {
                             },
                         },
 
+                    // number type argument fun on a fun (special hack for `eq` on `true`)
+                    (State::EvalAppArgNum { fun: EvalFunNum::Eq1 { .. }, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0))) => {
+                        println!(" // vm: hacking eq on true");
+                        eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0));
+                    },
+
                     // number type argument fun on a fun
                     (State::EvalAppArgNum { fun }, EvalOp::Fun(arg_fun)) =>
                         return Err(Error::AppExpectsNumButFunProvided {

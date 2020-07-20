@@ -6,9 +6,6 @@ use super::{
     AstNodeH,
     Error,
     Interpreter,
-    EvalOp,
-    EvalFun,
-    EvalFunNum,
     super::super::{
         code::{
             Op,

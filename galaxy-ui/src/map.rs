@@ -248,7 +248,7 @@ impl MapObject for Obstacle {
 impl DrawControl for Obstacle {
     fn draw<'t>(&mut self, c: &DrawContext, glc: &mut GlContext<'t>) {
         match self {
-            Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([0.0,0.0,1.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [0.0,0.0,1.0,1.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
+            Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([1.0,1.0,0.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [1.0,1.0,0.0,1.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
         }
     }
 }
@@ -259,7 +259,7 @@ impl Map {
         let mut y = cursor.cursor[1];
         //x -= self.size.size_x.0;
         //y = self.size.size_y.1 - y;
-        y = -y;
+        y = -y+1.0;
         cursor.cursor = [x.floor(),y.floor()];
         cursor
     }

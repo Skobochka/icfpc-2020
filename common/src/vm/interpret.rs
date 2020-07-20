@@ -619,7 +619,7 @@ impl Interpreter {
                     // Draw0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0))) => {
                         ast_node = Rc::new(AstNode::Literal {
-                            value: Op::Const(Const::Picture(self.eval_draw(arg, env)?)),
+                            value: Op::Const(Const::Picture(self.eval_draw(arg, env, cache)?)),
                         });
                         cache.memo(root, ast_node.clone());
                         break;
@@ -627,40 +627,40 @@ impl Interpreter {
 
                     // MultipleDraw0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0))) => {
-                        ast_node = self.eval_multiple_draw(arg, env)?;
+                        ast_node = self.eval_multiple_draw(arg, env, cache)?;
                         cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Send0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0))) => {
-                        ast_node = self.eval_send(arg, env)?;
+                        ast_node = self.eval_send(arg, env, cache)?;
                         break;
                     },
 
                     // Render0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0))) => {
-                        ast_node = self.eval_render(arg, env)?;
+                        ast_node = self.eval_render(arg, env, cache)?;
                         break;
                     },
 
                     // Mod0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0))) => {
-                        ast_node = self.eval_mod(arg, env)?;
+                        ast_node = self.eval_mod(arg, env, cache)?;
                         cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Dem0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0))) => {
-                        ast_node = self.eval_dem(arg, env)?;
+                        ast_node = self.eval_dem(arg, env, cache)?;
                         cache.memo(root, ast_node.clone());
                         break;
                     },
 
                     // Modem0 on a something
                     (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0))) => {
-                        ast_node = self.eval_modem(arg, env)?;
+                        ast_node = self.eval_modem(arg, env, cache)?;
                         cache.memo(root, ast_node.clone());
                         break;
                     },
@@ -1420,25 +1420,25 @@ impl Interpreter {
         }
     }
 
-    fn eval_draw(&self, points: Rc<AstNode>, env: &Env) -> Result<Picture, Error> {
+    fn eval_draw(&self, points: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Picture, Error> {
         let mut points_vec = Vec::new();
         let mut points_ops = points.render();
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &points_ops, env)?;
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &points_ops, env, cache)?;
             if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
                 break;
             }
 
-            let coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env)?;
+            let coord_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &points_ops, env, cache)?;
 
-            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env)?;
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &coord_ops, env, cache)?;
             let coord_a = match (ops.0.len(), ops.0.pop()) {
                 (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
                     number,
                 _ =>
                     return Err(Error::InvalidCoordForDrawArg),
             };
-            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env)?;
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &coord_ops, env, cache)?;
             let coord_b = match (ops.0.len(), ops.0.pop()) {
                 (1, Some(Op::Const(Const::EncodedNumber(number)))) =>
                     number,
@@ -1450,22 +1450,22 @@ impl Interpreter {
                 y: coord_b,
             });
 
-            points_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &points_ops, env)?;
+            points_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &points_ops, env, cache)?;
         }
         Ok(Picture { points: points_vec, })
     }
 
-    fn eval_multiple_draw(&self, points_list_of_lists: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
+    fn eval_multiple_draw(&self, points_list_of_lists: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNode>, Error> {
         let mut list_ops = points_list_of_lists.render();
 
         let mut output_ops = Ops(vec![]);
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
             if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
                 break;
             }
 
-            let child_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
+            let child_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
             output_ops.0.push(Op::App);
             output_ops.0.push(Op::App);
             output_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
@@ -1473,7 +1473,7 @@ impl Interpreter {
             output_ops.0.push(Op::Const(Const::Fun(Fun::Draw)));
             output_ops.0.extend(child_ops.0);
 
-            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
 
         }
         output_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
@@ -1486,9 +1486,9 @@ impl Interpreter {
         }
     }
 
-    fn eval_send(&self, send_args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
+    fn eval_send(&self, send_args: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNode>, Error> {
         let args_ops = send_args.render();
-        let send_list_val = self.eval_ops_to_list_val(args_ops, env)?;
+        let send_list_val = self.eval_ops_to_list_val(args_ops, env, cache)?;
         let send_cons_list = match send_list_val {
             encoder::ListVal::Number(number) =>
                 return Err(Error::ExpectedListArgForSendButGotNumber { number, }),
@@ -1531,17 +1531,17 @@ impl Interpreter {
         }
     }
 
-    fn eval_render(&self, render_args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
+    fn eval_render(&self, render_args: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNode>, Error> {
         let mut render_ops = render_args.render();
 
         let mut pictures = Vec::new();
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &render_ops, env)?;
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &render_ops, env, cache)?;
             if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
                 break;
             }
 
-            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &render_ops, env)?;
+            let mut ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &render_ops, env, cache)?;
             match (ops.0.len(), ops.0.pop()) {
                 (_, None) =>
                     unreachable!(),
@@ -1554,7 +1554,7 @@ impl Interpreter {
                 },
             }
 
-            render_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &render_ops, env)?;
+            render_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &render_ops, env, cache)?;
         }
 
         // perform send
@@ -1570,14 +1570,14 @@ impl Interpreter {
         Ok(Rc::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), }))
     }
 
-    fn eval_mod(&self, args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
+    fn eval_mod(&self, args: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNode>, Error> {
         let args_ops = args.render();
         let ops = self.eval_num_list_map(args_ops, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Demodulated, } =>
                 Ok(EncodedNumber { number, modulation: Modulation::Modulated, }),
             number @ EncodedNumber { modulation: Modulation::Modulated, .. } =>
                 Err(Error::ModOnModulatedNumber { number, }),
-        }, env)?;
+        }, env, cache)?;
 
         match self.build_tree(ops)? {
             Ast::Empty =>
@@ -1587,14 +1587,14 @@ impl Interpreter {
         }
     }
 
-    fn eval_dem(&self, args: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
+    fn eval_dem(&self, args: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNode>, Error> {
         let args_ops = args.render();
         let ops = self.eval_num_list_map(args_ops, &|num| match num {
             EncodedNumber { number, modulation: Modulation::Modulated, } =>
                 Ok(EncodedNumber { number, modulation: Modulation::Demodulated, }),
             number @ EncodedNumber { modulation: Modulation::Demodulated, .. } =>
                 Err(Error::DemOnDemodulatedNumber { number, }),
-        }, env)?;
+        }, env, cache)?;
 
         match self.build_tree(ops)? {
             Ast::Empty =>
@@ -1604,13 +1604,13 @@ impl Interpreter {
         }
     }
 
-    fn eval_modem(&self, ast_node: Rc<AstNode>, env: &Env) -> Result<Rc<AstNode>, Error> {
-        let ast_node = self.eval_mod(ast_node, env)?;
-        let ast_node = self.eval_dem(ast_node, env)?;
+    fn eval_modem(&self, ast_node: Rc<AstNode>, env: &Env, cache: &mut Cache) -> Result<Rc<AstNode>, Error> {
+        let ast_node = self.eval_mod(ast_node, env, cache)?;
+        let ast_node = self.eval_dem(ast_node, env, cache)?;
         Ok(ast_node)
     }
 
-    fn eval_num_list_map<F>(&self, mut list_ops: Ops, trans: &F, env: &Env) -> Result<Ops, Error>
+    fn eval_num_list_map<F>(&self, mut list_ops: Ops, trans: &F, env: &Env, cache: &mut Cache) -> Result<Ops, Error>
     where F: Fn(EncodedNumber) -> Result<EncodedNumber, Error>
     {
         match (list_ops.0.len(), list_ops.0.pop()) {
@@ -1626,26 +1626,26 @@ impl Interpreter {
 
         let mut trans_ops = Ops(vec![]);
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
             if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
                 break;
             }
 
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
-            let child_ops = self.eval_num_list_map(ops, trans, env)?;
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
+            let child_ops = self.eval_num_list_map(ops, trans, env, cache)?;
             trans_ops.0.push(Op::App);
             trans_ops.0.push(Op::App);
             trans_ops.0.push(Op::Const(Const::Fun(Fun::Cons)));
             trans_ops.0.extend(child_ops.0);
 
-            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
         }
         trans_ops.0.push(Op::Const(Const::Fun(Fun::Nil)));
 
         Ok(trans_ops)
     }
 
-    fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env) -> Result<encoder::ListVal, Error> {
+    fn eval_ops_to_list_val(&self, mut list_ops: Ops, env: &Env, cache: &mut Cache) -> Result<encoder::ListVal, Error> {
         match (list_ops.0.len(), list_ops.0.pop()) {
             (_, None) =>
                 unreachable!(),
@@ -1659,16 +1659,16 @@ impl Interpreter {
 
         let mut cons_stack = vec![];
         loop {
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env)?;
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::IsNil))], &list_ops, env, cache)?;
             if let [Op::Const(Const::Fun(Fun::True))] = &*ops.0 {
                 break;
             }
 
-            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env)?;
-            let child_list_val = self.eval_ops_to_list_val(ops, env)?;
+            let ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Car))], &list_ops, env, cache)?;
+            let child_list_val = self.eval_ops_to_list_val(ops, env, cache)?;
             cons_stack.push(child_list_val);
 
-            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env)?;
+            list_ops = self.eval_ops_on(&[Op::App, Op::Const(Const::Fun(Fun::Cdr))], &list_ops, env, cache)?;
         }
 
         let mut cons_list = encoder::ConsList::Nil;
@@ -1681,13 +1681,13 @@ impl Interpreter {
         Ok(encoder::ListVal::Cons(Box::new(cons_list)))
     }
 
-    fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env) -> Result<Ops, Error> {
+    fn eval_ops_on(&self, ops: &[Op], on_script: &Ops, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
         let mut script = Ops(Vec::with_capacity(ops.len() + on_script.0.len()));
         script.0.clear();
         script.0.extend(ops.iter().cloned());
         script.0.extend(on_script.0.iter().cloned());
         let tree = self.build_tree(script)?;
-        self.eval(tree, env)
+        self.eval_cache(tree, env, cache)
     }
 
     fn eval_interact(&self, protocol: Rc<AstNode>, state: Rc<AstNode>, vector: Rc<AstNode>, _env: &Env) -> Result<Rc<AstNode>, Error> {

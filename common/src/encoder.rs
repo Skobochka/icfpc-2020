@@ -120,6 +120,17 @@ impl ListVal {
             _ => unreachable!(),
         }
     }
+
+    pub fn as_tuple(&self) -> (&EncodedNumber, &EncodedNumber) {
+        match self {
+            ListVal::Cons(c) => match c.as_ref() {
+                ConsList::Cons(ListVal::Number(l), ListVal::Number(r))
+                    => (l, r),
+                _ => unreachable!(),
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

@@ -162,23 +162,25 @@ impl GalaxyState {
     }
 }
 
-fn next(session: &mut Session, ops: Ops, x: i64, y: i64, valid_state: &mut GalaxyState) -> Option<Ops> {
-    //ap ap ap interact galaxy nil ap ap vec 0 0
-
+fn extract_state(session: &mut Session, ops: Ops) -> Option<Ops> {
     let mut state_ops = Ops(vec![
         Op::App,
         Op::Const(Const::Fun(Fun::Car)),
     ]);
     state_ops.0.extend(ops.0);
-    let state_list_ops = match session.eval_force_list(state_ops.clone()) {
+    match session.eval_force_list(state_ops.clone()) {
         Ok(ops) =>
-            ops,
+            Some(ops),
         Err(e) => {
-            println!("Error in next: {:?}",e);
+            println!("Error in extract_state: {:?}",e);
             println!("state_ops: {:?}", state_ops);
             return None;
         },
-    };
+    }
+}
+
+fn next(session: &mut Session, state_list_ops: Ops, x: i64, y: i64, valid_state: &mut GalaxyState) -> Option<Ops> {
+    //ap ap ap interact galaxy nil ap ap vec 0 0
 
     let mut nops = Ops(vec![
         Op::App,
@@ -187,7 +189,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64, valid_state: &mut Galax
         Op::Const(Const::Fun(Fun::Interact)),
         Op::Const(Const::Fun(Fun::Galaxy)),
     ]);
-    nops.0.extend(state_list_ops.0);
+    nops.0.extend(state_list_ops.0.clone());
     nops.0.extend(vec![
         Op::App,
         Op::App,
@@ -212,7 +214,7 @@ fn next(session: &mut Session, ops: Ops, x: i64, y: i64, valid_state: &mut Galax
 
     match session.eval_ops(nops.clone()) {
         Ok(ops) => {
-            valid_state.state = state_ops;
+            valid_state.state = state_list_ops;
             valid_state.last_click = (x, y);
             Some(ops)
         },
@@ -408,7 +410,9 @@ fn main() {
 
                         if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
-                            current = next(&mut session, ops, coo[0] as i64, coo[1] as i64, &mut valid_state);
+                            if let Some(state_list_ops) = extract_state(&mut session, ops) {
+                                current = next(&mut session, state_list_ops, coo[0] as i64, coo[1] as i64, &mut valid_state);
+                            }
                             //current = next(&mut session, ops,0,0);
                             println!("Next step:   {:?}",t.elapsed());
                             if let Some(ops) = &current {
@@ -443,7 +447,9 @@ fn main() {
                         let (x, y) = prev_pixels.swap_remove(index);
                         if let Some(ops) = current.take() {
                             let t = std::time::Instant::now();
-                            current = next(&mut session, ops, x, y, &mut valid_state);
+                            if let Some(state_list_ops) = extract_state(&mut session, ops) {
+                                current = next(&mut session, state_list_ops, x, y, &mut valid_state);
+                            }
                             println!("Next step for ({}, {}):   {:?}", x, y, t.elapsed());
                             if let Some(ops) = &current {
                                 let t = std::time::Instant::now();

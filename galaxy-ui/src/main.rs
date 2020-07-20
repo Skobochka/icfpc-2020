@@ -267,7 +267,7 @@ fn main() {
     
     let mut glc = GlContext {
         gl: GlGraphics::new(opengl),
-        glyphs: GlyphCache::new("/Library/Fonts/Tahoma.ttf",(),TextureSettings::new()).unwrap(),
+        glyphs: GlyphCache::new("./Tahoma.ttf",(),TextureSettings::new()).unwrap(),
     };
 
     let ups = 10;

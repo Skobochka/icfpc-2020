@@ -231,7 +231,7 @@ impl Interpreter {
     }
 
     pub fn build_tree(&self, Ops(mut ops): Ops) -> Result<Ast, Error> {
-        println!("Interpreter::build_tree() on {} ops", ops.len());
+        // println!("Interpreter::build_tree() on {} ops", ops.len());
 
         enum State {
             AwaitAppFun,
@@ -375,6 +375,11 @@ impl Interpreter {
     }
 
     fn eval_tree(&self, ast_node: AstNodeH, env: &Env, cache: &mut Cache) -> Result<Ops, Error> {
+        let ast_node = self.eval_tree_ast(ast_node, env, cache)?;
+        Ok(ast_node.render())
+    }
+
+    fn eval_tree_ast(&self, ast_node: AstNodeH, env: &Env, cache: &mut Cache) -> Result<Rc<AstNodeH>, Error> {
         let mut ast_node = Rc::new(ast_node);
 
         enum State {
@@ -419,12 +424,12 @@ impl Interpreter {
                                         break;
                                     },
                                     None =>
-                                        return Ok(EvalOp::Abs(top_ast_node).render()),
+                                        return Ok(top_ast_node),
                                 }
                             },
 
                             eval_op =>
-                                return Ok(eval_op.render()),
+                                return Ok(eval_op.render_ast()),
                         },
                     Some(frame) =>
                         frame,
@@ -667,7 +672,7 @@ impl Interpreter {
 
                     // Car0 on another fun
                     (State::EvalAppArgCar, EvalOp::Fun(fun)) =>
-                        return Err(Error::ApplyingCarToInvalidFun { fun: EvalOp::Fun(fun).render(), }),
+                        return Err(Error::ApplyingCarToInvalidFun { fun: EvalOp::Fun(fun).render_ast().render(), }),
 
                     // Car0 on an abstract
                     (State::EvalAppArgCar, EvalOp::Abs(arg_ast_node)) =>
@@ -713,7 +718,7 @@ impl Interpreter {
 
                     // Cdr0 on another fun
                     (State::EvalAppArgCdr, EvalOp::Fun(fun)) =>
-                        return Err(Error::ApplyingCdrToInvalidFun { fun: EvalOp::Fun(fun).render(), }),
+                        return Err(Error::ApplyingCdrToInvalidFun { fun: EvalOp::Fun(fun).render_ast().render(), }),
 
                     // Cdr0 on an abstract
                     (State::EvalAppArgCdr, EvalOp::Abs(arg_ast_node)) =>
@@ -1526,24 +1531,11 @@ impl Interpreter {
                             },
                         },
 
-                    // // number type argument fun on a fun (special hack for `eq1` on fun)
-                    // (State::EvalAppArgNum { fun: EvalFunNum::Eq0, }, EvalOp::Fun(fun)) => {
-                    //     println!(" // vm: hacking eq0 on {:?}", fun);
-                    //     eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0));
-                    // },
-
-                    // // number type argument fun on a fun (special hack for `eq1` on fun)
-                    // (State::EvalAppArgNum { fun: EvalFunNum::Eq1 { .. }, }, EvalOp::Fun(fun)) => {
-                    //     println!(" // vm: hacking eq1 on {:?}", fun);
-                    //     eval_op = EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0));
-                    // },
-
                     // number type argument fun on a fun
                     (State::EvalAppArgNum { fun }, EvalOp::Fun(arg_fun)) => {
-                        // println!(" // vm: root is {:?}", root.clone().render());
                         return Err(Error::AppExpectsNumButFunProvided {
-                            fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render(),
-                            arg: EvalOp::Fun(arg_fun).render(),
+                            fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render_ast().render(),
+                            arg: EvalOp::Fun(arg_fun).render_ast().render(),
                         });
                     },
 
@@ -1556,49 +1548,17 @@ impl Interpreter {
                                 break;
                             },
                             None => {
-                                let mut fun_ops_iter = EvalOp::Fun(EvalFun::ArgNum(fun))
-                                    .render()
-                                    .0
-                                    .into_iter();
-                                let ast_node = match fun_ops_iter.next() {
-                                    None =>
-                                        panic!("render failure: expected op, but got none"),
-                                    Some(Op::App) =>
-                                        match fun_ops_iter.next() {
-                                            None =>
-                                                panic!("render failure: expected op fun, but got none"),
-                                            Some(op_a) =>
-                                                match fun_ops_iter.next() {
-                                                    None =>
-                                                        panic!("render failure: expected op {:?} arg, but got none", op_a),
-                                                    Some(op_b) =>
-                                                        match fun_ops_iter.next() {
-                                                            None =>
-                                                                AstNodeH::new(AstNode::App {
-                                                                    fun: Rc::new(AstNodeH::new(AstNode::App {
-                                                                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: op_a, })),
-                                                                        arg: Rc::new(AstNodeH::new(AstNode::Literal { value: op_b, })),
-                                                                    })),
-                                                                    arg: arg_ast_node,
-                                                                }),
-                                                            Some(..) =>
-                                                                unreachable!(),
-                                                        },
-                                                },
-                                        },
-                                    Some(op_a) =>
-                                        AstNodeH::new(AstNode::App {
-                                            fun: Rc::new(AstNodeH::new(AstNode::Literal { value: op_a, })),
-                                            arg: arg_ast_node,
-                                        }),
-                                };
-                                eval_op = EvalOp::Abs(Rc::new(ast_node));
+                                let ast_node = Rc::new(AstNodeH::new(AstNode::App {
+                                    fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render_ast(),
+                                    arg: arg_ast_node,
+                                }));
+                                eval_op = EvalOp::Abs(ast_node);
                             },
                         },
 
                     // fun on mod
                     (State::EvalAppArgNum { fun }, EvalOp::Mod { .. }) =>
-                        return Err(Error::ApplyingFunOnModulatedBits { fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render(), }),
+                        return Err(Error::ApplyingFunOnModulatedBits { fun: EvalOp::Fun(EvalFun::ArgNum(fun)).render_ast().render(), }),
 
                 }
 
@@ -2217,233 +2177,191 @@ impl EvalOp {
         }
     }
 
-    fn render(self) -> Ops {
+    fn render_ast(self) -> Rc<AstNodeH> {
         match self {
             EvalOp::Num { number, } =>
-                Ops(vec![Op::Const(Const::EncodedNumber(number))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(number)), })),
             EvalOp::Mod { bits, } =>
-                Ops(vec![Op::Const(Const::ModulatedBits(bits))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::ModulatedBits(bits)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Inc0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Inc))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Inc)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Dec0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Dec))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Dec)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Sum0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Sum))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Sum)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Sum1 { captured, })) =>
-                Ops(vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Sum)),
-                    Op::Const(Const::EncodedNumber(captured)),
-                ]),
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Sum)), })),
+                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(captured)), })),
+                })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mul0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Mul))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Mul)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Mul1 { captured, })) =>
-                Ops(vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Mul)),
-                    Op::Const(Const::EncodedNumber(captured)),
-                ]),
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Mul)), })),
+                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(captured)), })),
+                })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Div0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Div))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Div)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Div1 { captured, })) =>
-                Ops(vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Div)),
-                    Op::Const(Const::EncodedNumber(captured)),
-                ]),
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Div)), })),
+                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(captured)), })),
+                })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Eq))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Eq)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Eq1 { captured, })) =>
-                Ops(vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Eq)),
-                    Op::Const(Const::EncodedNumber(captured)),
-                ]),
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Eq)), })),
+                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(captured)), })),
+                })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Lt))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Lt)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Lt1 { captured, })) =>
-                Ops(vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Lt)),
-                    Op::Const(Const::EncodedNumber(captured)),
-                ]),
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Lt)), })),
+                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(captured)), })),
+                })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::Neg0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Neg))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Neg)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::True))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::True)),
-                ];
-                ops.extend(captured.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::True1 { captured, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::True)), })),
+                    arg: captured,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::False))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { captured, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::False)),
-                ];
-                ops.extend(captured.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False1 { captured, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::False)), })),
+                    arg: captured,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::I))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::I)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::C))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 { x, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::C)),
-                ];
-                ops.extend(x.render().0);
-                Ops(ops)
-            },
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::C)),
-                ];
-                ops.extend(x.render().0);
-                ops.extend(y.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::C)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C1 { x, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::C)), })),
+                    arg: x,
+                })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::C2 { x, y, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::C)), })),
+                        arg: x,
+                    })),
+                    arg: y,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::B))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 { x, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::B)),
-                ];
-                ops.extend(x.render().0);
-                Ops(ops)
-            },
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::B)),
-                ];
-                ops.extend(x.render().0);
-                ops.extend(y.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::B)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B1 { x, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::B)), })),
+                    arg: x,
+                })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::B2 { x, y, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::B)), })),
+                        arg: x,
+                    })),
+                    arg: y,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::S))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 { x, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::S)),
-                ];
-                ops.extend(x.render().0);
-                Ops(ops)
-            },
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::S)),
-                ];
-                ops.extend(x.render().0);
-                ops.extend(y.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::S)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S1 { x, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::S)), })),
+                    arg: x,
+                })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::S2 { x, y, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::S)), })),
+                        arg: x,
+                    })),
+                    arg: y,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Cons))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 { x, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Cons)),
-                ];
-                ops.extend(x.render().0);
-                Ops(ops)
-            },
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { x, y, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Cons)),
-                ];
-                ops.extend(x.render().0);
-                ops.extend(y.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons1 { x, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), })),
+                    arg: x,
+                })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cons2 { x, y, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cons)), })),
+                        arg: x,
+                    })),
+                    arg: y,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Car0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Car))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Car)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Cdr0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Cdr))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Cdr)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Nil0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Nil))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Nil)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IsNil0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::IsNil))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::IsNil)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Draw0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Draw))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Draw)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::MultipleDraw0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::MultipleDraw))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::MultipleDraw)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Send0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Send))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Send)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Mod0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Mod))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Mod)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Dem0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Dem))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Dem)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Modem0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Modem))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Modem)), })),
             EvalOp::Fun(EvalFun::ArgNum(EvalFunNum::IfZero0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::If0))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero1 { cond, })) =>
-                Ops(vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::If0)),
-                    Op::Const(Const::EncodedNumber(cond)),
-                ]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 { cond, true_clause, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::If0)),
-                    Op::Const(Const::EncodedNumber(cond)),
-                ];
-                ops.extend(true_clause.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), })),
+                    arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(cond)), })),
+                })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::IfZero2 { cond, true_clause, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::If0)), })),
+                        arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::EncodedNumber(cond)), })),
+                    })),
+                    arg: true_clause,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Interact))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Interact)),
-                ];
-                ops.extend(protocol.render().0);
-                Ops(ops)
-            },
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::Interact)),
-                ];
-                ops.extend(protocol.render().0);
-                ops.extend(state.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact1 { protocol, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), })),
+                    arg: protocol,
+                })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Interact2 { protocol, state, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Interact)), })),
+                        arg: protocol,
+                    })),
+                    arg: state,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::F38))]),
-            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, })) => {
-                let mut ops = vec![
-                    Op::App,
-                    Op::Const(Const::Fun(Fun::F38)),
-                ];
-                ops.extend(protocol.render().0);
-                Ops(ops)
-            },
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::F38_1 { protocol, })) =>
+                Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::F38)), })),
+                    arg: protocol,
+                })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0)) =>
-                Ops(vec![Op::Const(Const::Fun(Fun::Render))]),
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Render)), })),
 
             EvalOp::Abs(ast_node) =>
-                ast_node.render(),
+                ast_node,
         }
     }
 }

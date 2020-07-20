@@ -133,6 +133,15 @@ impl ListVal {
     }
 }
 
+impl PrettyPrintable for ListVal {
+    fn to_pretty_string(&self) -> String {
+        match self {
+            ListVal::Cons(c) => c.as_ref().to_pretty_string(),
+            ListVal::Number(n) => n.to_pretty_string(),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ConsList {
     Nil,

@@ -359,9 +359,6 @@ fn main() {
         last_click: (0, 0),
     };
 
-
-
-
     while let Some(e) = events.next(&mut window) {
        //println!("[{:?}] {:.3} {:?}",start.elapsed(),app.rotation,e);
 
@@ -375,6 +372,28 @@ fn main() {
             Event::Loop(Loop::Update(_args)) => {
                 app.cursor(cursor);
                 cursor.scroll = [0.0; 2];
+
+                while let Ok(console_req) = console_rx.try_recv() {
+                    match console_req {
+                        ConsoleRequest::SetState { ops, } => {
+                            println!("custom state installed: {:?}", ops);
+                            current = next(
+                                &mut session,
+                                ops,
+                                valid_state.last_click.0,
+                                valid_state.last_click.1,
+                                &mut valid_state,
+                            );
+                            println!("Load step:   {:?}",t.elapsed());
+                            if let Some(ops) = &current {
+                                app.main.scene.map.clear();
+                                let t = std::time::Instant::now();
+                                current_frame_seq = render_first(&mut session,ops);
+                                println!("     render_first: {:?}",t.elapsed());
+                            }
+                        },
+                    }
+                }
 
                 while let Ok(pics) = picture_rx.try_recv() {
                     match &mut pictures_incoming {

@@ -260,7 +260,13 @@ impl MapObject for Obstacle {
 impl DrawControl for Obstacle {
     fn draw<'t>(&mut self, c: &DrawContext, glc: &mut GlContext<'t>) {
         match self {
-            Obstacle::RectInTime{ rect: r, tm: t } => Rectangle::new([1.0,1.0,0.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [1.0,1.0,0.0,0.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl),
+            Obstacle::RectInTime{ rect: r, tm: t } => {
+                if *t > 0.99 {
+                    Rectangle::new([1.0,1.0,1.0,0.9 as f32]).border(rectangle::Border{ color: [1.0,1.0,0.0,0.0 as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl);
+                } else {
+                    Rectangle::new([1.0,1.0,0.0,0.7*(*t) as f32]).border(rectangle::Border{ color: [1.0,1.0,0.0,0.0*(*t) as f32], radius: 0.03 }).draw(r.rect(),&c.draw_state,c.transform,&mut glc.gl);
+                }
+            },
             Obstacle::Circle(cq) => Ellipse::new([1.0,0.0,0.0,0.5]).border(ellipse::Border{ color: [1.0,0.0,0.0,1.0], radius: 0.5 }).draw(cq.mbr(),&c.draw_state,c.transform,&mut glc.gl),
         }
     }

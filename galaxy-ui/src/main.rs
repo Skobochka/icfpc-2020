@@ -1,4 +1,8 @@
-use std::{io, fs};
+use std::{
+    io,
+    fs,
+    sync::mpsc,
+};
 
 use glutin_window::{
     GlutinWindow as Window,
@@ -17,7 +21,15 @@ use piston::{
     keyboard::Key,
 };
 
-use tokio::{self,runtime::Runtime};
+use tokio::{
+    self,
+    runtime::Runtime,
+    io::{
+        AsyncBufReadExt,
+        AsyncWriteExt,
+    },
+};
+
 use futures::{
     channel::{
         mpsc::unbounded,
@@ -46,6 +58,7 @@ use common::{
         PrettyPrintable,
     },
     code::*,
+    parser::AsmParser,
 };
 
 
@@ -277,8 +290,9 @@ fn next(session: &mut Session, state_list_ops: Ops, x: i64, y: i64, valid_state:
 }
 
 fn main() {
-    let (picture_tx,picture_rx) = std::sync::mpsc::channel();
-    let mut session = match session(picture_tx) {
+    let (picture_tx, picture_rx) = mpsc::channel();
+    let (console_tx, console_rx) = mpsc::channel();
+    let mut session = match session(picture_tx, console_tx) {
         Ok(s) => s,
         Err(e) => {
             println!("Failed to create VM: {:?}",e);
@@ -807,7 +821,7 @@ impl<'t> App<'t> {
     }
 }
 
-fn session(sender: std::sync::mpsc::Sender<Vec<Picture>>) -> Result<Session,common::proto::Error> {
+fn session(sender: mpsc::Sender<Vec<Picture>>, console_tx: mpsc::Sender<ConsoleRequest>) -> Result<Session,common::proto::Error> {
     let (outer_tx, mut outer_rx) = unbounded();
 
     let session = Session::with_interpreter(
@@ -818,6 +832,13 @@ fn session(sender: std::sync::mpsc::Sender<Vec<Picture>>) -> Result<Session,comm
     std::thread::spawn(move || {
         let intercom = Intercom::proxy();
         let mut runtime = Runtime::new().unwrap();
+
+        runtime.spawn(async move {
+            if let Err(error) = run_server(console_tx).await {
+                println!(" !! server has crashed with: {:?}", error);
+            }
+        });
+
         runtime.block_on(async {
             while let Some(request) = outer_rx.next().await {
                 match request {
@@ -845,4 +866,98 @@ fn session(sender: std::sync::mpsc::Sender<Vec<Picture>>) -> Result<Session,comm
     });
 
     Ok(session)
+}
+
+enum ConsoleRequest {
+    SetState { ops: Ops, },
+}
+
+use std::net::{
+    IpAddr,
+    Ipv4Addr,
+    SocketAddr,
+};
+use tokio::net::{
+    TcpStream,
+    TcpListener,
+};
+
+#[derive(Debug)]
+enum ServerError {
+    TcpListenerBind(io::Error),
+    Accept(io::Error),
+}
+
+async fn run_server(request_tx: mpsc::Sender<ConsoleRequest>) -> Result<(), ServerError> {
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 36142);
+    let mut listener = TcpListener::bind(addr).await
+        .map_err(ServerError::TcpListenerBind)?;
+
+    println!("server: running on {:?}", addr);
+
+    let mut incoming = listener.incoming();
+    while let Some(maybe_socket) = incoming.next().await {
+        let socket = maybe_socket.map_err(ServerError::Accept)?;
+        let client_peer = socket.peer_addr();
+        println!("server: accepted connection from {:?}", client_peer);
+        let client_request_tx = request_tx.clone();
+        tokio::spawn(async move {
+            if let Err(error) = run_client(socket, client_request_tx).await {
+                println!(" !! client {:?} has crashed with: {:?}", client_peer, error);
+            }
+        });
+    }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+enum ClientError {
+    ReadLine(io::Error),
+    WriteReply(io::Error),
+    FlushReply(io::Error),
+    RequestChannelClosed,
+}
+
+async fn run_client(mut socket: TcpStream, request_tx: mpsc::Sender<ConsoleRequest>) -> Result<(), ClientError> {
+    let (reader, mut writer) = socket.split();
+    let mut buf_reader = tokio::io::BufReader::new(reader);
+
+    let parser = AsmParser::new();
+    let mut line_buf = String::new();
+    loop {
+        line_buf.clear();
+        let bytes_read = buf_reader.read_line(&mut line_buf).await
+            .map_err(ClientError::ReadLine)?;
+        if bytes_read == 0 {
+            break;
+        }
+        match line_buf[.. bytes_read].trim() {
+            command if command.starts_with("/set state:") =>
+                match parser.parse_expression(line_buf[11 .. bytes_read].trim()) {
+                    Ok(ops) => {
+                        request_tx.send(ConsoleRequest::SetState { ops, })
+                            .map_err(|_| ClientError::RequestChannelClosed)?;
+                        writer.write_all("OK\n".as_bytes())
+                            .await.map_err(ClientError::WriteReply)?;
+                        writer.flush()
+                            .await.map_err(ClientError::FlushReply)?;
+                    }
+                    Err(error) => {
+                        writer.write_all(format!("PARSE ERROR: {:?}\n", error).as_bytes())
+                            .await.map_err(ClientError::WriteReply)?;
+                        writer.flush()
+                            .await.map_err(ClientError::FlushReply)?;
+                    },
+                },
+            command => {
+                writer.write_all(format!("INVALID COMMAND: {:?}\n", command).as_bytes()).await
+                    .map_err(ClientError::WriteReply)?;
+                writer.flush().await
+                    .map_err(ClientError::FlushReply)?;
+            },
+        }
+    }
+
+    Ok(())
 }

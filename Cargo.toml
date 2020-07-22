@@ -4,4 +4,5 @@ members = [
     "common",
     "galaxy-run",
     "galaxy-ui",
+    "matrix-bruteforce",
 ]

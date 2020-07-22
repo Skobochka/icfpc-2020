@@ -817,6 +817,12 @@ impl Interpreter {
                         break;
                     }
 
+                    // Pwr2_0 on a something
+                    (State::EvalAppFun { arg, }, EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Pwr2_0))) => {
+                        ast_node = self.eval_pwr2(arg)?;
+                        break;
+                    },
+
                     // unresolved fun on something
                     (State::EvalAppFun { arg: arg_ast_node, }, EvalOp::Abs(fun_ast_node)) =>
                         match env.lookup_ast(&fun_ast_node) {
@@ -1918,6 +1924,66 @@ impl Interpreter {
             })),
         })))
     }
+
+    fn eval_pwr2(&self, base: Rc<AstNodeH>) -> Result<Rc<AstNodeH>, Error> {
+        Ok(Rc::new(AstNodeH::new(AstNode::App {
+            fun: Rc::new(AstNodeH::new(AstNode::App {
+                fun: Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::S)), })),
+                    arg: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::App {
+                            fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::C)), })),
+                            arg: Rc::new(AstNodeH::new(AstNode::App {
+                                fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Eq)), })),
+                                arg: Rc::new(AstNodeH::new(AstNode::Literal {
+                                    value: Op::Const(Const::EncodedNumber(EncodedNumber {
+                                        number: Number::Positive(PositiveNumber { value: 0, }),
+                                        modulation: Modulation::Demodulated,
+                                    })),
+                                })),
+                            })),
+                        })),
+                        arg: Rc::new(AstNodeH::new(AstNode::Literal {
+                            value: Op::Const(Const::EncodedNumber(EncodedNumber {
+                                number: Number::Positive(PositiveNumber { value: 1, }),
+                                modulation: Modulation::Demodulated,
+                            })),
+                        })),
+                    })),
+                })),
+                arg: Rc::new(AstNodeH::new(AstNode::App {
+                    fun: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::B)), })),
+                        arg: Rc::new(AstNodeH::new(AstNode::App {
+                            fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Mul)), })),
+                            arg: Rc::new(AstNodeH::new(AstNode::Literal {
+                                value: Op::Const(Const::EncodedNumber(EncodedNumber {
+                                    number: Number::Positive(PositiveNumber { value: 2, }),
+                                    modulation: Modulation::Demodulated,
+                                })),
+                            })),
+                        })),
+                    })),
+                    arg: Rc::new(AstNodeH::new(AstNode::App {
+                        fun: Rc::new(AstNodeH::new(AstNode::App {
+                            fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::B)), })),
+                            arg: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Pwr2)), })),
+                        })),
+                        arg: Rc::new(AstNodeH::new(AstNode::App {
+                            fun: Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Sum)), })),
+                            arg: Rc::new(AstNodeH::new(AstNode::Literal {
+                                value: Op::Const(Const::EncodedNumber(EncodedNumber {
+                                    number: Number::Negative(NegativeNumber { value: -1, }),
+                                    modulation: Modulation::Demodulated,
+                                })),
+                            })),
+                        })),
+                    })),
+                })),
+            })),
+            arg: base,
+        })))
+    }
 }
 
 #[cfg(test)]
@@ -2022,6 +2088,7 @@ pub enum EvalFunAbs {
     F38_0,
     F38_1 { protocol: Rc<AstNodeH>, },
     Render0,
+    Pwr2_0,
 }
 
 impl EvalOp {
@@ -2064,7 +2131,7 @@ impl EvalOp {
             Op::Const(Const::Fun(Fun::False)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::False0)),
             Op::Const(Const::Fun(Fun::Pwr2)) =>
-                unimplemented!(),
+                EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Pwr2_0)),
             Op::Const(Const::Fun(Fun::I)) =>
                 EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::I0)),
             Op::Const(Const::Fun(Fun::Cons)) =>
@@ -2292,6 +2359,8 @@ impl EvalOp {
                 })),
             EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Render0)) =>
                 Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Render)), })),
+            EvalOp::Fun(EvalFun::ArgAbs(EvalFunAbs::Pwr2_0)) =>
+                Rc::new(AstNodeH::new(AstNode::Literal { value: Op::Const(Const::Fun(Fun::Pwr2)), })),
 
             EvalOp::Abs(ast_node) =>
                 ast_node,

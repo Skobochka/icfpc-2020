@@ -70,7 +70,8 @@ fn main() -> Result<(), Error> {
             ([Op::Const(Const::ModulatedBits(results_bits))], [Op::Const(Const::ModulatedBits(found_bits))]) => {
                 if results_bits.len() > found_bits.len() {
                     println!(
-                        " ;; a new pair is found! {:?}",
+                        " ;; a new pair is found @ {:?}! {:?}",
+                        pair,
                         encoder::ConsList::demodulate_from_string(results_bits)
                             .unwrap()
                             .to_pretty_string(),
@@ -78,7 +79,7 @@ fn main() -> Result<(), Error> {
                     found = results;
                     last_good_state_ops = state_ops.clone();
                 } else {
-                    println!(" ;; rejecting pair {:?}, restoring previous session", pair);
+                    println!(" ;; rejecting pair {:?}, restoring previous session ({} pairs left)", pair, pairs.len());
                     state_ops = last_good_state_ops.clone();
                 }
             },
